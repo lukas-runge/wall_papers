@@ -6,7 +6,7 @@
   import BoxGallery, { SLOT_NAMES } from "#components/BoxGallery";
   import { DEFAULT_SLOTS, SLOTS, creatureCatalogue, type SlotId } from "#lib/banner";
   import { ASSETS } from "#lib/assets";
-  import { BANNER_WHITE, CI_MODES } from "#lib/colors";
+  import { BANNER_WHITE } from "#lib/colors";
   import { HACK_ADVANCE_EM } from "#lib/layout";
   import { canvasToBlob, loadSources, renderWallpaper, svgDocument } from "#lib/render";
   import { figcraftFile } from "#lib/figcraft";
@@ -149,10 +149,6 @@
     s.variants.push(cloneVariant(v));
     s.active = s.variants.length - 1;
   }
-  function addAllColours() {
-    const have = new Set(s.variants.filter((x) => x.line1 === v.line1 && x.line2 === v.line2).map((x) => x.colour));
-    for (const m of CI_MODES) if (!have.has(m.id)) s.variants.push({ ...cloneVariant(v), colour: m.id });
-  }
   function removeVariant(i: number) {
     if (s.variants.length === 1) return;
     s.variants.splice(i, 1);
@@ -256,6 +252,24 @@
 
 <main class="layout">
   <section class="stage">
+    <div class="variants">
+      {#each s.variants as x, i (i)}
+        <div class="variant" class:on={i === s.active}>
+          <button type="button" class="pick" onclick={() => (s.active = i)} aria-label="Edit {variantLabel(x)}" aria-pressed={i === s.active}>
+            {#if thumbs[thumbKey(x)]}<img src={thumbs[thumbKey(x)]} alt="" />{:else}<span class="placeholder"></span>{/if}
+            <span class="name">{variantLabel(x)}</span>
+            <span class="meta">{variantMeta(x)}</span>
+          </button>
+          {#if s.variants.length > 1}
+            <button type="button" class="remove" onclick={() => removeVariant(i)} aria-label="Remove {variantLabel(x)}" title="Remove">×</button>
+          {/if}
+        </div>
+      {/each}
+      <div class="add">
+        <button type="button" class="quiet" onclick={addVariant}>+ Variant</button>
+      </div>
+    </div>
+
     <div class="frame" style="--aspect: {v.width / v.height}">
       <div class="canvas">
         <canvas bind:this={preview} aria-label="Preview of {variantLabel(v)}"></canvas>
@@ -334,24 +348,6 @@
       </div>
     </div>
 
-    <div class="variants">
-      {#each s.variants as x, i (i)}
-        <div class="variant" class:on={i === s.active}>
-          <button type="button" class="pick" onclick={() => (s.active = i)} aria-label="Edit {variantLabel(x)}" aria-pressed={i === s.active}>
-            {#if thumbs[thumbKey(x)]}<img src={thumbs[thumbKey(x)]} alt="" />{:else}<span class="placeholder"></span>{/if}
-            <span class="name">{variantLabel(x)}</span>
-            <span class="meta">{variantMeta(x)}</span>
-          </button>
-          {#if s.variants.length > 1}
-            <button type="button" class="remove" onclick={() => removeVariant(i)} aria-label="Remove {variantLabel(x)}" title="Remove">×</button>
-          {/if}
-        </div>
-      {/each}
-      <div class="add">
-        <button type="button" class="quiet" onclick={addVariant}>+ Variant</button>
-        <button type="button" class="quiet" onclick={addAllColours}>+ All colours</button>
-      </div>
-    </div>
   </section>
 
   <aside class="panel">

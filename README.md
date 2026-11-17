@@ -30,8 +30,7 @@ rendered on your machine.
 - **Layout.** *macOS lock screen* puts the banner between clock and login like
   the original wallpaper; *Centred* puts banner and pattern in the middle.
 - **Variants.** Any number of variants with thumbnails. Everything belongs to
-  the variant: text, colour, boxes, layout, size and format. *+ All colours*
-  adds the current one in every CI colour.
+  the variant: text, colour, boxes, layout, size and format.
 - **Output.** Any size up to 16384 px; PNG, SVG (fonts embedded) or FigCraft.
   *Download all variants* exports each variant in its own size and format:
   one `.figcraft` file (a frame per variant) if all of them are FigCraft,
