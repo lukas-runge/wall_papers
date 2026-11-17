@@ -1,4 +1,4 @@
-/** App state: a list of variants plus export settings; URL-hash form and file names. */
+/** App state: a list of variants, each with everything it needs to be exported; URL-hash form and file names. */
 import { CI_MODES, paletteFor, type Palette } from "./colors";
 import { DEFAULT_SLOTS, SLOTS, type Slots } from "./banner";
 import { ORIGINAL_LINES, slug, type Placement } from "./layout";
@@ -30,14 +30,14 @@ export interface Variant {
   colour: string;
   slots: Slots;
   placement: Placement;
+  width: number;
+  height: number;
+  format: Format;
 }
 
 export interface AppState {
   variants: Variant[];
   active: number;
-  width: number;
-  height: number;
-  format: Format;
 }
 
 export const DEFAULT_VARIANT: Variant = {
@@ -46,14 +46,14 @@ export const DEFAULT_VARIANT: Variant = {
   colour: "green",
   slots: { ...DEFAULT_SLOTS },
   placement: "lockscreen",
+  width: 7680,
+  height: 4320,
+  format: "png",
 };
 
 export const defaultState = (): AppState => ({
   variants: [cloneVariant(DEFAULT_VARIANT)],
   active: 0,
-  width: 7680,
-  height: 4320,
-  format: "png",
 });
 
 export const cloneVariant = (v: Variant): Variant => ({ ...v, slots: { ...v.slots } });
@@ -76,13 +76,21 @@ export const designOf = (v: Variant): Design => ({
 
 export const variantLabel = (v: Variant) => `${v.line1} ${v.line2} · ${colourInfo(v.colour).name}`;
 
+export const formatOf = (f: Format) => FORMATS.find((x) => x.id === f)!;
+
+/** Size and format, e.g. "7680 × 4320 · PNG". */
+export const variantMeta = (v: Variant) => `${v.width} × ${v.height} · ${formatOf(v.format).label}`;
+
 // ---------------------------------------------------------------------------
 // URL hash: base64url JSON, empty for the default state
 
 /** Colour ids of the first version (German names), so old links keep working. */
 const LEGACY_IDS: Record<string, string> = { gruen: "green", tuerkis: "turquoise", lavendel: "lavender", flieder: "lilac", rosa: "rose", gelb: "yellow" };
 
-function sanitizeVariant(raw: unknown): Variant | null {
+const sizeOk = (v: unknown) => Number.isFinite(Number(v)) && Number(v) >= 64 && Number(v) <= 16384;
+
+/** `legacy` carries size and format of links from when they were global settings. */
+function sanitizeVariant(raw: unknown, legacy: Record<string, unknown> = {}): Variant | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
   const str = (v: unknown, max: number) => (typeof v === "string" ? v.toUpperCase().slice(0, max) : null);
@@ -99,6 +107,9 @@ function sanitizeVariant(raw: unknown): Variant | null {
     colour,
     slots,
     placement: r.placement === "centered" ? "centered" : "lockscreen",
+    width: sizeOk(r.width) ? Math.round(Number(r.width)) : sizeOk(legacy.w) ? Math.round(Number(legacy.w)) : DEFAULT_VARIANT.width,
+    height: sizeOk(r.height) ? Math.round(Number(r.height)) : sizeOk(legacy.h) ? Math.round(Number(legacy.h)) : DEFAULT_VARIANT.height,
+    format: [r.format, legacy.f].find((f): f is Format => FORMATS.some((x) => x.id === f)) ?? DEFAULT_VARIANT.format,
   };
 }
 
@@ -111,13 +122,9 @@ export function readState(hash: string): AppState {
   if (!raw) return st;
   try {
     const j = JSON.parse(b64urlDecode(raw)) as Record<string, unknown>;
-    const variants = Array.isArray(j.v) ? j.v.map(sanitizeVariant).filter((v): v is Variant => v !== null).slice(0, 64) : [];
+    const variants = Array.isArray(j.v) ? j.v.map((v) => sanitizeVariant(v, j)).filter((v): v is Variant => v !== null).slice(0, 64) : [];
     if (variants.length) st.variants = variants;
     st.active = Math.min(Math.max(0, Number(j.a) || 0), st.variants.length - 1);
-    const w = Number(j.w), h = Number(j.h);
-    if (Number.isFinite(w) && w >= 64 && w <= 16384) st.width = Math.round(w);
-    if (Number.isFinite(h) && h >= 64 && h <= 16384) st.height = Math.round(h);
-    if (FORMATS.some((f) => f.id === j.f)) st.format = j.f as Format;
   } catch {
     // broken link: start fresh
   }
@@ -127,7 +134,7 @@ export function readState(hash: string): AppState {
 export function writeState(st: AppState): string {
   const d = defaultState();
   if (JSON.stringify({ ...st }) === JSON.stringify(d)) return "";
-  return `s=${b64urlEncode(JSON.stringify({ v: st.variants, a: st.active, w: st.width, h: st.height, f: st.format }))}`;
+  return `s=${b64urlEncode(JSON.stringify({ v: st.variants, a: st.active }))}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -139,13 +146,14 @@ export function baseName(v: Variant): string {
   return `40C3_${slug([v.line1, v.line2])}_${c.index}_${c.name.replace(/[^A-Za-z0-9]+/g, "")}`;
 }
 
-/** Unique file names for a list of variants (same slogan and colour get -2, -3 …). */
-export function fileNames(variants: readonly Variant[], ext: string): string[] {
+/** Unique file names for a list of variants, each in its own format (duplicates get -2, -3 …). */
+export function fileNames(variants: readonly Variant[]): string[] {
   const seen = new Map<string, number>();
   return variants.map((v) => {
-    const b = baseName(v);
-    const n = (seen.get(b) ?? 0) + 1;
-    seen.set(b, n);
+    const b = baseName(v), ext = formatOf(v.format).ext;
+    const key = `${b}.${ext}`;
+    const n = (seen.get(key) ?? 0) + 1;
+    seen.set(key, n);
     return `${b}${n > 1 ? `-${n}` : ""}.${ext}`;
   });
 }

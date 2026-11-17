@@ -86,6 +86,20 @@ describe("wallpaper", () => {
     expect(d.next_id).toBeGreaterThan(Math.max(...nodes.map((n) => n.id)));
   });
 
+  it("lines up frames of different sizes without overlap", () => {
+    const d2 = figcraftDocument(
+      [
+        { name: "a", svg: wallpaperSvg(design, 640, 360, sources) },
+        { name: "b", svg: wallpaperSvg(design, 400, 260, sources) },
+      ],
+      "t",
+      parse,
+    ) as { nodes: Record<string, N> };
+    const [a, b] = Object.values(d2.nodes).filter((n) => n.type === "frame");
+    expect(b.transform[4]).toBeGreaterThanOrEqual(a.transform[4] + a.width);
+    expect([b.width, b.height]).toEqual([400, 260]);
+  });
+
   it("packs a .figcraft zip", () => {
     const files = unzipSync(figcraftFile([{ name: "x", svg: wallpaperSvg(design, 640, 360, sources) }], "WALL_PAPERS"));
     expect(JSON.parse(strFromU8(files["document.json"])).format).toBe("figcraft");

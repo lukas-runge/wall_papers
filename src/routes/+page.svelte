@@ -18,6 +18,7 @@
     fileNames,
     readState,
     variantLabel,
+    variantMeta,
     writeState,
     type AppState,
     type Format,
@@ -27,7 +28,7 @@
   let s = $state<AppState>(readState(location.hash));
   const v = $derived(s.variants[s.active]);
   const info = $derived(colourInfo(v.colour));
-  const sizeKey = $derived(`${s.width}x${s.height}`);
+  const sizeKey = $derived(`${v.width}x${v.height}`);
   const isPreset = $derived(SIZES.some(([w, h]) => `${w}x${h}` === sizeKey));
   let customSize = $state(false);
 
@@ -37,6 +38,11 @@
   let busy = $state(false);
 
   const update = (patch: Partial<Variant>) => (s.variants[s.active] = { ...v, ...patch });
+  // The custom size fields belong to the variant being edited.
+  $effect(() => {
+    s.active;
+    customSize = false;
+  });
 
   // Page colours follow the active variant.
   $effect(() => {
@@ -55,7 +61,7 @@
   // Preview of the active variant.
   let previewGen = 0;
   $effect(() => {
-    const design = designOf(v), w = s.width, h = s.height;
+    const design = designOf(v), w = v.width, h = v.height;
     const g = ++previewGen;
     const t = setTimeout(async () => {
       const pw = Math.min(1920, w), ph = Math.round((pw * h) / w);
@@ -72,16 +78,15 @@
     return () => clearTimeout(t);
   });
 
-  // Thumbnails of all variants (cached by content and aspect ratio).
-  const thumbKey = (x: Variant) => `${JSON.stringify(x)}@${s.width}x${s.height}`;
+  // Thumbnails of all variants (cached by look and aspect ratio; the format does not change them).
+  const thumbKey = (x: Variant) => JSON.stringify({ ...x, format: undefined });
   $effect(() => {
-    const todo = s.variants.map((x) => ({ key: thumbKey(x), design: designOf(x) })).filter((x) => !thumbs[x.key]);
+    const todo = s.variants.map((x) => ({ key: thumbKey(x), design: designOf(x), w: x.width, h: x.height })).filter((x) => !thumbs[x.key]);
     if (!todo.length) return;
     const t = setTimeout(async () => {
-      const tw = 400, th = Math.round((tw * s.height) / s.width);
       for (const x of todo) {
         if (thumbs[x.key]) continue;
-        const c = await renderWallpaper(x.design, tw, th);
+        const c = await renderWallpaper(x.design, 400, Math.round((400 * x.h) / x.w));
         thumbs[x.key] = URL.createObjectURL(await canvasToBlob(c));
       }
     }, 300);
@@ -110,9 +115,10 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
 
-  async function encode(x: Variant, format: Format): Promise<Uint8Array> {
-    if (format === "svg") return strToU8(await svgDocument(designOf(x), s.width, s.height));
-    const c = await renderWallpaper(designOf(x), s.width, s.height);
+  /** PNG or SVG bytes of one variant. */
+  async function encode(x: Variant): Promise<Uint8Array> {
+    if (x.format === "svg") return strToU8(await svgDocument(designOf(x), x.width, x.height));
+    const c = await renderWallpaper(designOf(x), x.width, x.height);
     try {
       return new Uint8Array(await (await canvasToBlob(c)).arrayBuffer());
     } finally {
@@ -122,8 +128,8 @@
 
   async function figcraft(list: Variant[]): Promise<Uint8Array> {
     const src = await loadSources();
-    const frames = list.map((x) => ({ name: variantLabel(x), svg: wallpaperSvg(designOf(x), s.width, s.height, { ...src, fontBase64: undefined }) }));
-    const tc = await renderWallpaper(designOf(list[0]), 512, Math.round((512 * s.height) / s.width));
+    const frames = list.map((x) => ({ name: variantLabel(x), svg: wallpaperSvg(designOf(x), x.width, x.height, { ...src, fontBase64: undefined }) }));
+    const tc = await renderWallpaper(designOf(list[0]), 512, Math.round((512 * list[0].height) / list[0].width));
     return figcraftFile(frames, "WALL_PAPERS", new Uint8Array(await (await canvasToBlob(tc)).arrayBuffer()));
   }
 
@@ -141,32 +147,38 @@
     }
   }
 
+  const blob = (data: Uint8Array, type: string) => new Blob([data as Uint8Array<ArrayBuffer>], { type });
+
   const downloadVariant = () =>
     run(async () => {
-      const ext = FORMATS.find((f) => f.id === s.format)!.ext;
-      const [name] = fileNames([v], ext);
+      const [name] = fileNames([v]);
       status = "Rendering …";
-      const data = s.format === "figcraft" ? await figcraft([v]) : await encode(v, s.format);
-      save(new Blob([data as Uint8Array<ArrayBuffer>], { type: mime[s.format] }), name);
+      save(blob(v.format === "figcraft" ? await figcraft([v]) : await encode(v), mime[v.format]), name);
       status = "";
     });
 
+  /** Every variant in its own size and format. FigCraft variants share one .figcraft file (a frame each). */
   const downloadAll = () =>
     run(async () => {
-      if (s.format === "figcraft") {
-        status = `Rendering ${s.variants.length} variants …`;
-        save(new Blob([(await figcraft(s.variants)) as Uint8Array<ArrayBuffer>], { type: mime.figcraft }), "WALL_PAPERS.figcraft");
+      const fig = s.variants.filter((x) => x.format === "figcraft");
+      if (fig.length === s.variants.length) {
+        status = `Rendering ${fig.length} variants …`;
+        save(blob(await figcraft(fig), mime.figcraft), "WALL_PAPERS.figcraft");
         status = "";
         return;
       }
-      const ext = FORMATS.find((f) => f.id === s.format)!.ext;
-      const names = fileNames(s.variants, ext);
+      const names = fileNames(s.variants);
       const files: Record<string, Uint8Array> = {};
       for (const [i, x] of s.variants.entries()) {
+        if (x.format === "figcraft") continue;
         status = `Rendering ${i + 1} / ${s.variants.length} …`;
-        files[names[i]] = await encode(x, s.format);
+        files[names[i]] = await encode(x);
       }
-      save(new Blob([zipSync(files, { level: s.format === "svg" ? 6 : 0 }) as Uint8Array<ArrayBuffer>], { type: "application/zip" }), "WALL_PAPERS.zip");
+      if (fig.length) {
+        status = "Rendering FigCraft file …";
+        files["WALL_PAPERS.figcraft"] = await figcraft(fig);
+      }
+      save(blob(zipSync(files, { level: 0 }), "application/zip"), "WALL_PAPERS.zip");
       status = "";
     });
 
@@ -175,6 +187,8 @@
     addEventListener("hashchange", onHash);
     return () => removeEventListener("hashchange", onHash);
   });
+
+  const clampSize = (val: string) => Math.min(16384, Math.max(64, Math.round(Number(val) || 0)));
 
   const LAYOUTS: { id: Placement; label: string }[] = [
     { id: "centered", label: "Centred" },
@@ -197,6 +211,7 @@
           <button type="button" class="pick" onclick={() => (s.active = i)} aria-label="Edit {variantLabel(x)}" aria-pressed={i === s.active}>
             {#if thumbs[thumbKey(x)]}<img src={thumbs[thumbKey(x)]} alt="" />{:else}<span class="placeholder"></span>{/if}
             <span class="name">{variantLabel(x)}</span>
+            <span class="meta">{variantMeta(x)}</span>
           </button>
           {#if s.variants.length > 1}
             <button type="button" class="remove" onclick={() => removeVariant(i)} aria-label="Remove {variantLabel(x)}" title="Remove">×</button>
@@ -233,14 +248,17 @@
     </fieldset>
 
     <fieldset>
-      <legend>Export</legend>
+      <legend>Output</legend>
       <label>Size
         <select
           value={customSize || !isPreset ? "custom" : sizeKey}
           onchange={(e) => {
             const val = e.currentTarget.value;
             customSize = val === "custom";
-            if (!customSize) [s.width, s.height] = val.split("x").map(Number);
+            if (!customSize) {
+              const [width, height] = val.split("x").map(Number);
+              update({ width, height });
+            }
           }}
         >
           {#each SIZES as [w, h] (`${w}x${h}`)}<option value="{w}x{h}">{w} × {h}</option>{/each}
@@ -249,11 +267,15 @@
       </label>
       {#if customSize || !isPreset}
         <div class="custom-size">
-          <label>Width <input type="number" min="64" max="16384" value={s.width} onchange={(e) => (s.width = Math.min(16384, Math.max(64, Math.round(+e.currentTarget.value || 0))))} /></label>
-          <label>Height <input type="number" min="64" max="16384" value={s.height} onchange={(e) => (s.height = Math.min(16384, Math.max(64, Math.round(+e.currentTarget.value || 0))))} /></label>
+          <label>Width <input type="number" min="64" max="16384" value={v.width} onchange={(e) => update({ width: clampSize(e.currentTarget.value) })} /></label>
+          <label>Height <input type="number" min="64" max="16384" value={v.height} onchange={(e) => update({ height: clampSize(e.currentTarget.value) })} /></label>
         </div>
       {/if}
-      <Segmented label="Format" options={FORMATS} value={s.format} onchange={(f) => (s.format = f)} />
+      <Segmented label="Format" options={FORMATS} value={v.format} onchange={(format) => update({ format })} />
+    </fieldset>
+
+    <fieldset>
+      <legend>Download</legend>
       <button type="button" class="loud" disabled={busy} onclick={downloadVariant}>Download variant</button>
       <button type="button" class="quiet" disabled={busy} onclick={downloadAll}>Download all variants</button>
       {#if status}<p class="status" role="status">{status}</p>{/if}
@@ -355,8 +377,12 @@
     display: block;
     width: 100%;
     aspect-ratio: 16 / 9;
-    object-fit: cover;
+    object-fit: contain;
     background: color-mix(in srgb, var(--white) 6%, var(--ground));
+  }
+  .meta {
+    font-size: 0.7rem;
+    color: var(--muted);
   }
   .name {
     overflow: hidden;

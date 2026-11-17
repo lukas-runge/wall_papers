@@ -25,11 +25,14 @@ rendered on your machine.
   empty — picked from a gallery that previews every option in its box.
 - **Layout.** *macOS lock screen* puts the banner between clock and login like
   the original wallpaper; *Centred* puts banner and pattern in the middle.
-- **Variants.** Any number of variants (text, colour, boxes, layout), with
-  thumbnails; *+ All colours* adds the current design in every CI colour.
-- **Export.** Any size up to 16384 px. PNG, SVG (fonts embedded) or FigCraft.
-  *Download all variants* gives a ZIP of PNGs/SVGs, or one `.figcraft` file
-  with a frame per variant.
+- **Variants.** Any number of variants with thumbnails. Everything belongs to
+  the variant: text, colour, boxes, layout, size and format. *+ All colours*
+  adds the current one in every CI colour.
+- **Output.** Any size up to 16384 px; PNG, SVG (fonts embedded) or FigCraft.
+  *Download all variants* exports each variant in its own size and format:
+  one `.figcraft` file (a frame per variant) if all of them are FigCraft,
+  otherwise a ZIP with the PNGs, SVGs and one `.figcraft` for the FigCraft
+  variants.
 
 The whole set of variants lives in the URL, so it can be shared as a link.
 
@@ -69,7 +72,7 @@ SVG: `pnpm split-banner` (Python 3). CI fails if it is out of date.
 | `src/lib/svgpath.ts` | SVG path parser (lines, curves, arcs) |
 | `src/lib/colors.ts` | CI palette and the background derivation |
 | `src/lib/layout.ts` | Banner geometry, wordmark layout, placements |
-| `src/lib/state.ts` | Variants, export settings, URL hash, file names |
+| `src/lib/state.ts` | Variants, URL hash, file names |
 | `src/lib/render.ts` | Rasterising in the browser |
 | `src/routes/+page.svelte`, `src/lib/components/` | The app |
 

@@ -9,23 +9,27 @@ describe("URL state", () => {
 
   it("round-trips several variants and the export settings", () => {
     const st = defaultState();
-    st.variants.push({ ...DEFAULT_VARIANT, line1: "::1_", line2: "FIRST", colour: "pink", placement: "centered", slots: { ...DEFAULT_VARIANT.slots, R2: "asset:Icon_Cat" } });
-    st.variants.push({ ...DEFAULT_VARIANT, colour: "#123456", slots: { ...DEFAULT_VARIANT.slots } });
+    st.variants.push({ ...DEFAULT_VARIANT, line1: "::1_", line2: "FIRST", colour: "pink", placement: "centered", slots: { ...DEFAULT_VARIANT.slots, R2: "asset:Icon_Cat" }, width: 3456, height: 2234, format: "figcraft" });
+    st.variants.push({ ...DEFAULT_VARIANT, colour: "#123456", slots: { ...DEFAULT_VARIANT.slots }, format: "svg" });
     st.active = 2;
-    st.width = 3456;
-    st.height = 2234;
-    st.format = "figcraft";
     expect(readState(`#${writeState(st)}`)).toEqual(st);
   });
 
   it("ignores nonsense", () => {
     const st = readState("#s=bm9wZQ");
     expect(st).toEqual(defaultState());
-    const bad = readState(`#s=${btoa(JSON.stringify({ v: [{ colour: "javascript:", slots: { L1: "<script>" } }], w: -5, f: "exe" }))}`);
+    const bad = readState(`#s=${btoa(JSON.stringify({ v: [{ colour: "javascript:", slots: { L1: "<script>" }, width: -5, format: "exe" }] }))}`);
     expect(bad.variants[0].colour).toBe("green");
     expect(bad.variants[0].slots.L1).toBe(DEFAULT_VARIANT.slots.L1);
-    expect(bad.width).toBe(7680);
-    expect(bad.format).toBe("png");
+    expect(bad.variants[0].width).toBe(7680);
+    expect(bad.variants[0].format).toBe("png");
+  });
+});
+
+describe("old links", () => {
+  it("move the former global size and format into every variant", () => {
+    const st = readState(`#s=${btoa(JSON.stringify({ v: [{ colour: "pink" }, { colour: "green", format: "svg" }], w: 3024, h: 1964, f: "figcraft" }))}`);
+    expect(st.variants.map((v) => [v.width, v.height, v.format])).toEqual([[3024, 1964, "figcraft"], [3024, 1964, "svg"]]);
   });
 });
 
@@ -44,10 +48,11 @@ describe("colours", () => {
 describe("file names", () => {
   it("follows the scheme of the hand-made exports and stays unique", () => {
     const v = { ...DEFAULT_VARIANT, line1: "SELF_", line2: "HOSTED" };
-    expect(fileNames([{ ...v, colour: "turquoise" }, { ...v, colour: "green" }, { ...v, colour: "green" }], "png")).toEqual([
+    expect(fileNames([{ ...v, colour: "turquoise" }, { ...v, colour: "green" }, { ...v, colour: "green" }, { ...v, colour: "green", format: "svg" }])).toEqual([
       "40C3_SELF_HOSTED_1_Turquoise.png",
       "40C3_SELF_HOSTED_0_Green.png",
       "40C3_SELF_HOSTED_0_Green-2.png",
+      "40C3_SELF_HOSTED_0_Green.svg",
     ]);
   });
 });

@@ -428,20 +428,27 @@ export function figcraftDocument(frames: readonly FigcraftFrame[], docName: stri
     return id;
   };
 
-  const cols = Math.min(4, frames.length);
-  frames.forEach((f, i) => {
+  // Frames in rows of four; sizes may differ per variant.
+  const parsed = frames.map((f) => {
     const doc = parse(f.svg);
     const root = doc.documentElement;
-    const W = Number(root.getAttribute("width")), H = Number(root.getAttribute("height"));
-    const conv = new Converter(doc);
-    const kids = Array.from(root.children).flatMap((c) => conv.walk(c, I, ROOT_STYLE));
-    const gap = Math.round(W * 0.05);
-    const fx = (i % cols) * (W + gap), fy = Math.floor(i / cols) * (H + gap);
-    const frame: Node = { type: "frame", name: f.name, box: [0, 0, W, H], children: kids };
-    const id = nextId++;
-    nodes[String(id)] = { id, name: f.name, type: "frame", parent: 1, transform: [1, 0, 0, 1, fx, fy], width: W, height: H, clip: true, children: frame.children!.map((c) => emit(c, id, [0, 0])) };
-    page.children.push(id);
+    return { f, doc, root, W: Number(root.getAttribute("width")), H: Number(root.getAttribute("height")) };
   });
+  const gap = Math.round(Math.max(...parsed.map((p) => p.W)) * 0.05);
+  let y = 0;
+  for (let row = 0; row < parsed.length; row += 4) {
+    const items = parsed.slice(row, row + 4);
+    let x = 0;
+    for (const { f, doc, root, W, H } of items) {
+      const conv = new Converter(doc);
+      const kids = Array.from(root.children).flatMap((c) => conv.walk(c, I, ROOT_STYLE));
+      const id = nextId++;
+      nodes[String(id)] = { id, name: f.name, type: "frame", parent: 1, transform: [1, 0, 0, 1, x, y], width: W, height: H, clip: true, children: kids.map((c) => emit(c, id, [0, 0])) };
+      page.children.push(id);
+      x += W + gap;
+    }
+    y += Math.max(...items.map((p) => p.H)) + gap;
+  }
 
   return {
     format: "figcraft",
