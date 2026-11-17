@@ -248,10 +248,6 @@
 
 <header class="masthead">
   <h1 class="wordmark" aria-label="WALL_PAPERS"><span>WALL<span class="cursor">_</span></span><span>PAPERS</span></h1>
-</header>
-
-<main class="layout">
-  <section class="stage">
     <div class="variants">
       {#each s.variants as x, i (i)}
         <div class="variant" class:on={i === s.active}>
@@ -269,7 +265,10 @@
         <button type="button" class="quiet" onclick={addVariant}>+ Variant</button>
       </div>
     </div>
+</header>
 
+<main class="layout">
+  <section class="stage">
     <div class="frame" style="--aspect: {v.width / v.height}">
       <div class="canvas">
         <canvas bind:this={preview} aria-label="Preview of {variantLabel(v)}"></canvas>
@@ -406,8 +405,19 @@
 </footer>
 
 <style>
+  /* Logo and variants share the top row; on narrow screens they stack. */
   .masthead {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--gap);
     padding: 14px var(--gap) 0;
+  }
+  @media (max-width: 900px) {
+    .masthead {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 12px;
+    }
   }
   .wordmark {
     margin: 0;
@@ -434,7 +444,8 @@
 
   .layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(280px, 330px);
+    grid-template-columns: auto minmax(280px, 330px);
+    justify-content: start;
     gap: var(--gap);
     padding: 14px var(--gap) var(--gap);
     align-items: start;
@@ -442,6 +453,9 @@
   @media (max-width: 900px) {
     .layout {
       grid-template-columns: minmax(0, 1fr);
+    }
+    .frame {
+      width: 100% !important;
     }
   }
 
@@ -454,8 +468,7 @@
   .frame {
     border: 1.5px solid var(--accent);
     padding: 6px;
-    width: min(100%, calc((100svh - 290px) * var(--aspect) + 15px));
-    margin-inline: auto;
+    width: min(calc(100vw - 330px - 3 * var(--gap)), calc((100svh - 230px) * var(--aspect) + 15px));
   }
   .canvas {
     position: relative;
@@ -532,7 +545,7 @@
   .variant {
     position: relative;
     flex: none;
-    width: 160px;
+    width: 150px;
     border: 1.5px solid var(--line);
   }
   .variant.on {
@@ -590,9 +603,10 @@
   .add {
     flex: none;
     display: grid;
-    gap: 8px;
-    align-content: center;
-    width: 150px;
+    width: 120px;
+  }
+  .add button {
+    height: 100%;
   }
 
   .panel {
