@@ -3,8 +3,8 @@
 ## 40C3 design assets
 
 `src/lib/assets/svg/` and `src/lib/assets/creatures/` contain unmodified files
-from the official 40C3 styleguide (*MODEL_ CITIZENS*, 40th Chaos Communication
-Congress) by the 40C3 design team: the announcement banner, the logo, the
+from the official [40C3 styleguide](https://events.ccc.de/congress/2026/infos/styleguide/) (*MODEL_ CITIZENS*, 40th Chaos
+Communication Congress, `40c3-styleguide-full-latest.zip`) by the 40C3 design team: the announcement banner, the logo, the
 pattern strips, the citizens and the icons. The styleguide hands them out to
 the community to build their own things with them ("Have fun crafting your
 own!"). They are **not** covered by this repository's MIT license.

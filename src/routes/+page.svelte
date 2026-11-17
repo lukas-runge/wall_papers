@@ -4,10 +4,13 @@
   import BoxPicker from "#components/BoxPicker";
   import ColourPicker from "#components/ColourPicker";
   import Segmented from "#components/Segmented";
+  import BoxGallery, { SLOT_NAMES } from "#components/BoxGallery";
+  import { SLOTS, creatureCatalogue, type SlotId } from "#lib/banner";
+  import { ASSETS } from "#lib/assets";
   import { CI_MODES } from "#lib/colors";
   import { canvasToBlob, loadSources, renderWallpaper, svgDocument } from "#lib/render";
   import { figcraftFile } from "#lib/figcraft";
-  import { wallpaperSvg } from "#lib/wallpaper";
+  import { boxRects, wallpaperSvg } from "#lib/wallpaper";
   import type { Placement } from "#lib/layout";
   import {
     FORMATS,
@@ -190,11 +193,28 @@
 
   const clampSize = (val: string) => Math.min(16384, Math.max(64, Math.round(Number(val) || 0)));
 
+  // Boxes in the preview: click to change their contents.
+  const catalogue = creatureCatalogue(ASSETS);
+  const creatureLabel = (id: string) => catalogue.find((c) => c.id === id)?.label ?? id;
+  const hotspots = $derived(boxRects({ lines: [v.line1, v.line2], placement: v.placement }, v.width, v.height));
+  let openBox = $state<SlotId | null>(null);
+  let stage: HTMLElement;
+  const pct = (f: number) => `${(f * 100).toFixed(3)}%`;
+  function closeOnOutside(e: MouseEvent) {
+    if (openBox && stage && !stage.contains(e.target as Node)) openBox = null;
+  }
+  $effect(() => {
+    s.active;
+    openBox = null;
+  });
+
   const LAYOUTS: { id: Placement; label: string }[] = [
     { id: "centered", label: "Centred" },
     { id: "lockscreen", label: "macOS lock screen" },
   ];
 </script>
+
+<svelte:window onclick={closeOnOutside} onkeydown={(e) => e.key === "Escape" && (openBox = null)} />
 
 <header class="masthead">
   <h1 class="wordmark" aria-label="WALL_PAPERS"><span>WALL<span class="cursor">_</span></span><span>PAPERS</span></h1>
@@ -202,7 +222,42 @@
 
 <main class="layout">
   <section class="stage">
-    <div class="frame"><canvas bind:this={preview} aria-label="Preview of {variantLabel(v)}"></canvas></div>
+    <div class="frame">
+      <div class="canvas" bind:this={stage}>
+        <canvas bind:this={preview} aria-label="Preview of {variantLabel(v)}"></canvas>
+        {#each SLOTS as slot (slot)}
+          {@const r = hotspots[slot]}
+          <button
+            type="button"
+            class="hotspot"
+            class:open={openBox === slot}
+            style="left: {pct(r.x)}; top: {pct(r.y)}; width: {pct(r.w)}; height: {pct(r.h)}"
+            aria-label="Box {SLOT_NAMES[slot]}: {creatureLabel(v.slots[slot])}"
+            aria-expanded={openBox === slot}
+            title={creatureLabel(v.slots[slot])}
+            onclick={() => (openBox = openBox === slot ? null : slot)}
+          ></button>
+        {/each}
+        {#if openBox}
+          {@const slot = openBox}
+          {@const r = hotspots[slot]}
+          <div
+            class="popover"
+            style={slot.startsWith("L") ? `left: ${pct(r.x + r.w + 0.012)}; top: ${pct(Math.min(r.y, 0.45))}` : `right: ${pct(1 - r.x + 0.012)}; top: ${pct(Math.min(r.y, 0.45))}`}
+          >
+            <BoxGallery
+              {slot}
+              value={v.slots[slot]}
+              palette={info.palette}
+              onpick={(id) => {
+                update({ slots: { ...v.slots, [slot]: id } });
+                openBox = null;
+              }}
+            />
+          </div>
+        {/if}
+      </div>
+    </div>
 
     <h2>Variants</h2>
     <div class="variants">
@@ -285,7 +340,7 @@
 
 <footer class="footer">
   <p>
-    Design assets: <a href="https://events.ccc.de/">40C3 styleguide</a> by the 40C3 design team.
+    Design assets: <a href="https://events.ccc.de/congress/2026/infos/styleguide/">40C3 styleguide</a> by the 40C3 design team.
     Fonts: <a href="https://sourcefoundry.org/hack/">Hack</a> (MIT / Bitstream Vera),
     <a href="https://fonts.google.com/specimen/Jersey+10">Jersey 10</a> (OFL).
     Unofficial, not by the CCC. <a href="https://github.com/lukas-runge/wall_papers">Source</a>
@@ -332,6 +387,32 @@
     }
   }
 
+  .canvas {
+    position: relative;
+  }
+  .hotspot {
+    position: absolute;
+    padding: 0;
+    border: 2px solid transparent;
+    background: transparent;
+    cursor: pointer;
+    transition:
+      border-color 0.15s,
+      background 0.15s;
+  }
+  .hotspot:hover,
+  .hotspot:focus-visible,
+  .hotspot.open {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    outline: none;
+  }
+  .popover {
+    position: absolute;
+    z-index: 2;
+    width: min(360px, 60%);
+    box-shadow: 0 12px 40px rgb(0 0 0 / 0.55);
+  }
   .frame {
     border: 1.5px solid var(--accent);
     padding: 6px;

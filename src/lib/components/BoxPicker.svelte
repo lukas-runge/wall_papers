@@ -1,18 +1,12 @@
 <script lang="ts">
   import { DEFAULT_SLOTS, SLOTS, boxSvg, creatureCatalogue, type SlotId, type Slots } from "#lib/banner";
+  import BoxGallery, { SLOT_NAMES as NAMES } from "#components/BoxGallery";
   import { ASSETS } from "#lib/assets";
   import type { Palette } from "#lib/colors";
 
   let { slots, palette, onchange }: { slots: Slots; palette: Palette; onchange: (slots: Slots) => void } = $props();
 
   const catalogue = creatureCatalogue(ASSETS);
-  const GROUPS = [
-    { id: "Banner", label: "Banner" },
-    { id: "Citizens", label: "Citizens" },
-    { id: "Icons", label: "Icons" },
-    { id: "Other", label: "" },
-  ] as const;
-  const NAMES: Record<SlotId, string> = { L1: "top left", L2: "middle left", L3: "bottom left", R1: "top right", R2: "middle right", R3: "bottom right" };
 
   let open = $state<SlotId | null>(null);
   let root: HTMLElement;
@@ -55,20 +49,7 @@
 
   {#if open}
     {@const slot = open}
-    <div class="gallery" role="listbox" aria-label="Contents for the box {NAMES[slot]}">
-      {#each GROUPS as g (g.id)}
-        {@const items = catalogue.filter((c) => c.group === g.id)}
-        {#if g.label}<h3>{g.label}</h3>{/if}
-        <div class="grid">
-          {#each items as c (c.id)}
-            <button type="button" role="option" aria-selected={slots[slot] === c.id} class:selected={slots[slot] === c.id} title={c.label} aria-label={c.label} onclick={() => pick(slot, c.id)}>
-              {@html boxSvg(slot, c.id, palette, ASSETS)}
-              <span>{c.label}</span>
-            </button>
-          {/each}
-        </div>
-      {/each}
-    </div>
+    <BoxGallery {slot} value={slots[slot]} {palette} onpick={(id) => pick(slot, id)} />
   {/if}
 
   <button type="button" class="quiet small" disabled={isDefault} onclick={() => onchange({ ...DEFAULT_SLOTS })}>Reset boxes</button>
@@ -124,50 +105,4 @@
     width: 85%;
   }
 
-  .gallery {
-    border: 1.5px solid var(--accent);
-    background: var(--ground);
-    padding: 0.4rem 0.6rem 0.7rem;
-    max-height: 420px;
-    overflow: auto;
-  }
-  h3 {
-    margin: 0.5rem 0 0.3rem;
-    font: 400 1.15rem "Jersey 10", "Hack", monospace;
-    color: var(--accent);
-    text-transform: uppercase;
-  }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
-    gap: 6px;
-  }
-  .grid button {
-    display: grid;
-    gap: 2px;
-    padding: 2px;
-    border: 1.5px solid transparent;
-    background: none;
-    color: var(--muted);
-    font: 400 0.7rem/1.2 "Hack", monospace;
-    text-align: center;
-  }
-  .grid button:hover {
-    border-color: var(--line);
-    color: var(--white);
-  }
-  .grid button.selected {
-    border-color: var(--accent);
-    color: var(--white);
-  }
-  .grid :global(svg) {
-    width: 100%;
-    height: auto;
-    display: block;
-  }
-  .grid span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 </style>

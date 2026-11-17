@@ -22,7 +22,8 @@ rendered on your machine.
   accent. Green keeps the original values exactly.
 - **Boxes.** Each of the six boxes takes one of the banner's line drawings, a
   citizen or an icon from the styleguide (recoloured to the palette), or stays
-  empty — picked from a gallery that previews every option in its box.
+  empty. Click a box in the preview (or in the mini banner next to it) and
+  pick from a gallery that shows every option in that box.
 - **Layout.** *macOS lock screen* puts the banner between clock and login like
   the original wallpaper; *Centred* puts banner and pattern in the middle.
 - **Variants.** Any number of variants with thumbnails. Everything belongs to
@@ -82,6 +83,6 @@ comes from the repository name, so renaming the repository just works.
 
 ## Credits
 
-Design assets from the official 40C3 styleguide by the 40C3 design team, fonts
+Design assets from the official [40C3 styleguide](https://events.ccc.de/congress/2026/infos/styleguide/) by the 40C3 design team, fonts
 Hack and Jersey 10; see [NOTICE.md](NOTICE.md). Unofficial fan tool, not
 affiliated with the CCC. Code: [MIT](LICENSE).

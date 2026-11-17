@@ -11,7 +11,7 @@
  *  4. wordmark in Hack Bold, fill plus a thin stroke
  */
 import { BANNER_WHITE, type Palette } from "./colors";
-import { bannerMarkup, flattenSvg, viewBox, type AssetSource, type Slots } from "./banner";
+import { SLOTS, bannerMarkup, flattenSvg, frameBox, viewBox, type AssetSource, type SlotId, type Slots } from "./banner";
 import { BANNER, BANNER_HEIGHT, PLACEMENTS, TEXT, layoutWordmark, patternTiles, type Placement } from "./layout";
 
 export interface Design {
@@ -51,6 +51,27 @@ export function bannerFrame(width: number, height: number, placement: Placement)
   const s = h / BANNER.height;
   const w = BANNER.width * s;
   return { x: (width - w) / 2, y: PLACEMENTS[placement].bannerTop * height, w, h, s };
+}
+
+/**
+ * Where the six box frames end up, as fractions of the wallpaper (0–1), so the
+ * preview can make them clickable. Follows the column shift of the wordmark.
+ */
+export function boxRects(d: Pick<Design, "lines" | "placement">, width: number, height: number): Record<SlotId, { x: number; y: number; w: number; h: number }> {
+  const b = bannerFrame(width, height, d.placement);
+  const { shift } = layoutWordmark(d.lines);
+  const out = {} as Record<SlotId, { x: number; y: number; w: number; h: number }>;
+  for (const slot of SLOTS) {
+    const [x0, y0, x1, y1] = frameBox(slot);
+    const dx = slot.startsWith("L") ? shift : -shift;
+    out[slot] = {
+      x: (b.x + (x0 + dx) * b.s) / width,
+      y: (b.y + y0 * b.s) / height,
+      w: ((x1 - x0) * b.s) / width,
+      h: ((y1 - y0) * b.s) / height,
+    };
+  }
+  return out;
 }
 
 export function wallpaperSvg(d: Design, width: number, height: number, src: Sources, id = "w"): string {
