@@ -201,6 +201,28 @@
     }
   }
 
+  // The variant strip fades out at a side where more cards are hidden.
+  let strip: HTMLDivElement;
+  let fadeL = $state(false), fadeR = $state(false);
+  function measureStrip() {
+    fadeL = strip.scrollLeft > 1;
+    fadeR = strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 1;
+  }
+  $effect(() => {
+    const ro = new ResizeObserver(measureStrip);
+    ro.observe(strip);
+    return () => ro.disconnect();
+  });
+  // Keep the active card in view (after adding, selecting or importing a variant).
+  $effect(() => {
+    const i = s.active, n = s.variants.length;
+    tick().then(() => {
+      strip.querySelectorAll(".variant")[i]?.scrollIntoView({ inline: "nearest", block: "nearest" });
+      measureStrip();
+    });
+    void n;
+  });
+
   function addVariant() {
     s.variants.push(cloneVariant(v));
     s.active = s.variants.length - 1;
@@ -313,7 +335,7 @@
 
 <header class="masthead">
   <h1 class="wordmark" aria-label="WALL_PAPERS"><span>WALL<span class="cursor">_</span></span><span>PAPERS</span></h1>
-    <div class="variants">
+    <div class="variants" bind:this={strip} onscroll={measureStrip} style="--fade-l: {fadeL ? '40px' : '0px'}; --fade-r: {fadeR ? '56px' : '0px'}">
       {#each s.variants as x, i (i)}
         <div class="variant" class:on={i === s.active}>
           <button type="button" class="pick" onclick={() => (s.active = i)} aria-label="Edit {variantLabel(x)}" aria-pressed={i === s.active}>
@@ -650,6 +672,7 @@
     gap: 8px;
     overflow-x: auto;
     min-width: 0;
+    mask-image: linear-gradient(to right, transparent, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent);
   }
   /* Touch screens swipe; their scrollbar would lie over the cards. */
   @media (pointer: coarse) {
