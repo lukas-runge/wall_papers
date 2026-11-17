@@ -1,0 +1,38 @@
+{
+  "name": "wall_papers",
+  "version": "0.1.0",
+  "description": "Make your own 40C3 MODEL_ CITIZENS wallpapers in the browser: slogan, CI colours, citizens, lock-screen placement.",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#lib/*": "./src/lib/*.ts"
+  },
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "test": "vitest run",
+    "split-banner": "python3 scripts/split-banner.py"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-static": "^4.0.1",
+    "@sveltejs/kit": "^3.1.0",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@types/node": "^26.6.6",
+    "svelte": "^5.57.3",
+    "svelte-check": "^4.7.8",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  },
+  "packageManager": "pnpm@11.2.2",
+  "engines": {
+    "node": ">=26"
+  }
+}

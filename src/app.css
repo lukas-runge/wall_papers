@@ -1,0 +1,109 @@
+/* WALL_PAPERS — look and feel after the 40C3 styleguide:
+   Jersey 10 for headings, Hack for everything else, dark ground, one accent.
+   --accent and --ground follow the colour picked in the app. */
+
+@font-face {
+  font-family: "Hack";
+  src: url("./lib/assets/fonts/Hack-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Hack";
+  src: url("./lib/assets/fonts/Hack-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Jersey 10";
+  src: url("./lib/assets/fonts/jersey-10-latin-400-normal.woff2") format("woff2");
+  font-display: swap;
+}
+
+:root {
+  --ground: #000d00;
+  --accent: #75b44b;
+  --white: #e7edea;
+  --muted: color-mix(in srgb, var(--white) 62%, var(--ground));
+  --line: color-mix(in srgb, var(--accent) 55%, var(--ground));
+  --gap: clamp(16px, 2.4vw, 32px);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--white);
+  font: 400 15px/1.5 "Hack", ui-monospace, monospace;
+  transition: background 0.4s;
+}
+
+a {
+  color: var(--accent);
+}
+
+h2,
+legend {
+  font-family: "Jersey 10", "Hack", monospace;
+  font-weight: 400;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+input:not([type="checkbox"], [type="color"]),
+select {
+  width: 100%;
+  background: transparent;
+  border: 1.5px solid var(--line);
+  padding: 0.45em 0.6em;
+  border-radius: 0;
+}
+input:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+select option,
+select optgroup {
+  background: var(--ground);
+}
+
+/* "A LOUD HEADER!" and "a quiet header" from the styleguide */
+button {
+  cursor: pointer;
+  border: 1.5px solid var(--accent);
+  border-radius: 0;
+  padding: 0.55em 1em;
+  font-family: "Jersey 10", "Hack", monospace;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+button.loud {
+  background: var(--accent);
+  color: var(--ground);
+}
+button.quiet {
+  background: transparent;
+  color: var(--accent);
+}
+button.small {
+  font-size: 1.15rem;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
