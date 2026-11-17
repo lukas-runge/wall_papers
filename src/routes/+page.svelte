@@ -555,7 +555,7 @@
     }
     /* the space below the letters (descenders) already counts as gap */
     .masthead .wordmark {
-      margin-bottom: -0.22em;
+      margin-bottom: -0.17em;
     }
   }
   .wordmark {
