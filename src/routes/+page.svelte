@@ -722,9 +722,8 @@
     content: "";
     position: absolute;
     inset: 0;
-    background: linear-gradient(110deg, transparent 30%, rgb(255 255 255 / 0.85) 48%, rgb(255 255 255 / 0.85) 52%, transparent 70%) no-repeat;
+    background: linear-gradient(110deg, transparent 30%, rgb(255 255 255 / 0.55) 48%, rgb(255 255 255 / 0.55) 52%, transparent 70%) no-repeat;
     background-size: 300% 100%;
-    mix-blend-mode: screen;
     opacity: 0;
     animation: glint 0.7s ease-out calc(var(--at) + 150ms);
   }
