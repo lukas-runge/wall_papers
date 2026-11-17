@@ -538,8 +538,8 @@
       "stage panel"
       "footer panel";
     justify-content: start;
-    /* 12px between header, preview and credits; page margins outside */
-    gap: 12px var(--gap);
+    /* 12px between all parts; page margins outside */
+    gap: 12px;
     padding: 12px var(--gap) var(--gap);
     align-items: start;
   }
@@ -576,7 +576,7 @@
   .frame {
     border: 1.5px solid var(--accent);
     padding: 6px;
-    width: min(calc(100vw - 330px - 3 * var(--gap)), calc((100svh - var(--bar) - 2 * var(--gap) - 12px - 15px) * var(--aspect) + 15px));
+    width: min(calc(100vw - 330px - 2 * var(--gap) - 12px), calc((100svh - var(--bar) - 2 * var(--gap) - 12px - 15px) * var(--aspect) + 15px));
   }
   .canvas {
     position: relative;
@@ -736,7 +736,7 @@
      a legend so the first border lines up with the preview frame. */
   .panel {
     display: grid;
-    gap: 0.9rem;
+    gap: 0; /* the legends above the borders make the 12px between boxes */
     margin-top: -0.75rem;
   }
   fieldset {
