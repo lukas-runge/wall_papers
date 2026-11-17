@@ -1,16 +1,40 @@
 import { describe, expect, it } from "vitest";
 import { bannerParts } from "./generated/banner-parts";
 import { CI_MODES } from "./colors";
-import { DEFAULT_SLOTS, SLOTS, bannerSvg, bannerStyle, crossMarkup, embedAsset, mapAssetColour, slotContent } from "./banner";
+import {
+  DEFAULT_SLOTS,
+  SLOTS,
+  bannerColour,
+  bannerMarkup,
+  boxSvg,
+  crossMarkup,
+  embedAsset,
+  flattenSvg,
+  inlineClasses,
+  mapAssetColour,
+  parseClassRules,
+  slotContent,
+} from "./banner";
 
 const green = CI_MODES[0];
 const pink = CI_MODES[4];
+const rules = parseClassRules(bannerParts.style);
+
+describe("class inlining", () => {
+  it("reads the banner stylesheet", () => {
+    expect(rules["cls-7"]).toEqual({ fill: "#e7edea" });
+    expect(rules["cls-3"]).toEqual({ fill: "none", "stroke-miterlimit": "10", stroke: "#75b24c", "stroke-width": "1.45" });
+  });
+  it("replaces classes by attributes", () => {
+    expect(inlineClasses('<path class="cls-7" d="M0 0"/>', rules)).toBe('<path fill="#e7edea" d="M0 0"/>');
+  });
+});
 
 describe("boxes", () => {
-  it("default slots give back the original banner contents unchanged", () => {
+  it("default slots give back the original banner contents", () => {
     for (const slot of SLOTS) {
       const id = DEFAULT_SLOTS[slot].slice("banner:".length) as keyof typeof bannerParts.creatures;
-      expect(slotContent(slot, DEFAULT_SLOTS[slot], green, [])).toBe(bannerParts.creatures[id].markup);
+      expect(slotContent(slot, DEFAULT_SLOTS[slot], green, [])).toBe(inlineClasses(bannerParts.creatures[id].markup, rules));
     }
   });
 
@@ -19,24 +43,30 @@ describe("boxes", () => {
   });
 
   it("moves a figure into another box, standing on its bottom edge", () => {
-    const moved = slotContent("R1", "banner:hood", green, []);
     const dy = bannerParts.frames.R1.box[3] - bannerParts.frames.L1.box[3];
-    expect(moved).toMatch(new RegExp(`^<g transform="translate\\([\\d.]+ ${Math.round(dy * 1000) / 1000}\\)">`));
+    expect(slotContent("R1", "banner:hood", green, [])).toMatch(new RegExp(`^<g transform="translate\\([\\d.]+ ${Math.round(dy * 1000) / 1000}\\)">`));
   });
 
   it("can leave a box empty", () => {
     expect(slotContent("L1", "empty", green, [])).toBe("");
   });
+
+  it("renders a single box for the picker", () => {
+    const svg = boxSvg("R2", "banner:swirl", pink, []);
+    expect(svg).toMatch(/^<svg xmlns="http:\/\/www.w3.org\/2000\/svg" viewBox="/);
+    expect(svg).toContain(pink.accent);
+    expect(svg).not.toContain("class=");
+  });
 });
 
 describe("colours", () => {
   it("keeps the original banner greens in green", () => {
-    expect(bannerStyle(green)).toBe(bannerParts.style);
+    expect(bannerColour(green)("#6ab143")).toBe("#6ab143");
+    expect(bannerColour(green)("#75b24c")).toBe("#75b24c");
   });
   it("recolours frames and lines", () => {
-    const st = bannerStyle(pink);
-    expect(st).not.toMatch(/#6ab143|#75b24c/i);
-    expect(st).toContain(pink.accent);
+    expect(bannerColour(pink)("#6ab143")).toBe(pink.accent);
+    expect(bannerColour(pink)("#e7edea")).toBe("#e7edea");
   });
   it("maps styleguide asset colours onto the palette", () => {
     expect(mapAssetColour("#75b44b", pink)).toBe(pink.accent);
@@ -47,13 +77,12 @@ describe("colours", () => {
 
 describe("assets", () => {
   const svg = `<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 20"><defs><style>.cls-1{fill:#75b44b}</style><clipPath id="clippath"><rect width="1" height="1"/></clipPath></defs><path class="cls-1" clip-path="url(#clippath)" d="M0 0h10v20z"/></svg>`;
-  it("prefixes classes and ids so several assets can share one banner", () => {
+  it("inlines classes, prefixes ids and recolours", () => {
     const out = embedAsset(svg, "a-L1-", bannerParts.frames.L1.box, pink);
-    expect(out).toContain(".a-L1-cls-1");
-    expect(out).toContain('class="a-L1-cls-1"');
+    expect(out).not.toContain("class=");
+    expect(out).toContain(`fill="${pink.accent}"`);
     expect(out).toContain('id="a-L1-clippath"');
     expect(out).toContain("url(#a-L1-clippath)");
-    expect(out).toContain(pink.accent);
   });
   it("fits the asset inside the frame", () => {
     const out = embedAsset(svg, "p-", bannerParts.frames.L1.box, pink);
@@ -61,14 +90,23 @@ describe("assets", () => {
     const [, y0, , y1] = bannerParts.frames.L1.box;
     expect(h).toBeLessThan(y1 - y0);
   });
+  it("flattens a stylesheet away", () => {
+    expect(flattenSvg(svg)).not.toContain("<style>");
+  });
 });
 
-describe("banner document", () => {
-  it("does not shift anything for the original wordmark", () => {
-    const svg = bannerSvg({ palette: green, slots: DEFAULT_SLOTS, assets: [], logo: '<svg viewBox="0 0 1 1"><path class="cls-1" fill="#ebedf0"/></svg>', shift: 0, width: 678, height: 330 });
-    expect(svg).toContain('<g transform="translate(0 0)">');
-    // The full-size background of the banner is gone (only its unused style rule is left).
-    expect(svg).not.toContain('class="cls-6"');
-    expect(svg).toContain('class="logo-cls-1"');
+describe("banner markup", () => {
+  const logo = '<svg viewBox="0 0 1 1"><defs><style>.cls-1{fill:#ebedf0}</style></defs><path class="cls-1" d="M0 0"/></svg>';
+  it("has no classes left and no full-size background", () => {
+    const m = bannerMarkup({ palette: green, slots: DEFAULT_SLOTS, assets: [], logo, shift: 0 });
+    expect(m).not.toContain("class=");
+    expect(m).not.toContain('width="678"');
+    expect(m).toContain('<g data-name="Left column" transform="translate(0 0)">');
+    expect(m).toContain('fill="#e7edea" d="M0 0"');
+  });
+  it("moves the columns inwards for a shorter wordmark", () => {
+    const m = bannerMarkup({ palette: green, slots: DEFAULT_SLOTS, assets: [], logo, shift: 21.85 });
+    expect(m).toContain('<g data-name="Left column" transform="translate(21.85 0)">');
+    expect(m).toContain('<g data-name="Right column" transform="translate(-21.85 0)">');
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ADVANCE, ORIGINAL_LINES, TEXT, layoutWordmark, patternTiles, slug, wordmarkHints } from "./layout";
+import { ADVANCE, ORIGINAL_LINES, TEXT, layoutWordmark, patternTiles, slug } from "./layout";
 
 describe("wordmark layout", () => {
   it("keeps the hand-kerned original exactly where it was", () => {
@@ -20,13 +20,6 @@ describe("wordmark layout", () => {
 
   it("moves the columns out for longer text", () => {
     expect(layoutWordmark(["WALL_", "PAPERS_ROCK"]).shift).toBeLessThan(0);
-  });
-});
-
-describe("hints", () => {
-  it("asks for a longer second line", () => {
-    expect(wordmarkHints(["LOCAL_", "FIRST"])).toContain("Looks best when line 2 is longer than line 1.");
-    expect(wordmarkHints(["SELF_", "HOSTED"])).toEqual([]);
   });
 });
 

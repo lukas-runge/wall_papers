@@ -1,99 +1,150 @@
-/** App state, its URL-hash form (shareable links) and file names. */
-import { CI_MODES } from "./colors";
+/** App state: a list of variants plus export settings; URL-hash form and file names. */
+import { CI_MODES, paletteFor, type Palette } from "./colors";
 import { DEFAULT_SLOTS, SLOTS, type Slots } from "./banner";
 import { ORIGINAL_LINES, slug, type Placement } from "./layout";
+import type { Design } from "./wallpaper";
 
-export const SIZES = {
-  "8k": { label: "8K, like the 39C3 wallpapers", w: 7680, h: 4320 },
-  "5k": { label: "5K / Studio Display", w: 5120, h: 2880 },
-  "4k": { label: "4K UHD", w: 3840, h: 2160 },
-  qhd: { label: "QHD", w: 2560, h: 1440 },
-  fhd: { label: "Full HD", w: 1920, h: 1080 },
-  mbp16: { label: 'MacBook Pro 16"', w: 3456, h: 2234 },
-  mbp14: { label: 'MacBook Pro 14"', w: 3024, h: 1964 },
-  mba15: { label: 'MacBook Air 15"', w: 2880, h: 1864 },
-  mba13: { label: 'MacBook Air 13"', w: 2560, h: 1664 },
-} as const;
+export const SIZES = [
+  [7680, 4320],
+  [5120, 2880],
+  [3840, 2160],
+  [3456, 2234],
+  [3024, 1964],
+  [2880, 1864],
+  [2560, 1664],
+  [2560, 1440],
+  [1920, 1080],
+] as const;
 
-export type SizeId = keyof typeof SIZES;
+export type Format = "png" | "svg" | "figcraft";
+export const FORMATS: { id: Format; label: string; ext: string }[] = [
+  { id: "png", label: "PNG", ext: "png" },
+  { id: "svg", label: "SVG", ext: "svg" },
+  { id: "figcraft", label: "FigCraft", ext: "figcraft" },
+];
 
-export interface AppState {
+export interface Variant {
   line1: string;
   line2: string;
-  placement: Placement;
-  /** Colour shown in the preview. */
-  active: string;
-  /** Colours that go into the ZIP. */
-  selected: string[];
-  /** Own colour (#rrggbb). */
-  custom: string;
+  /** CI mode id (e.g. "pink") or an own colour "#rrggbb". */
+  colour: string;
   slots: Slots;
-  size: SizeId | "custom";
-  w: number;
-  h: number;
+  placement: Placement;
 }
 
-const MODE_IDS = [...CI_MODES.map((m) => m.id), "custom"];
+export interface AppState {
+  variants: Variant[];
+  active: number;
+  width: number;
+  height: number;
+  format: Format;
+}
 
-export const DEFAULT_STATE: AppState = {
+export const DEFAULT_VARIANT: Variant = {
   line1: ORIGINAL_LINES[0],
   line2: ORIGINAL_LINES[1],
-  placement: "lockscreen",
-  active: "gruen",
-  selected: CI_MODES.map((m) => m.id),
-  custom: "#00b4ff",
+  colour: "gruen",
   slots: { ...DEFAULT_SLOTS },
-  size: "8k",
-  w: 7680,
-  h: 4320,
+  placement: "lockscreen",
 };
 
-const clampSize = (v: number, fallback: number) => (Number.isFinite(v) && v >= 64 ? Math.min(16384, Math.round(v)) : fallback);
+export const defaultState = (): AppState => ({
+  variants: [cloneVariant(DEFAULT_VARIANT)],
+  active: 0,
+  width: 7680,
+  height: 4320,
+  format: "png",
+});
+
+export const cloneVariant = (v: Variant): Variant => ({ ...v, slots: { ...v.slots } });
+
+const isHex = (c: string) => /^#[0-9a-f]{6}$/i.test(c);
+
+export function colourInfo(colour: string): { index: string; name: string; palette: Palette } {
+  const mode = CI_MODES.find((m) => m.id === colour);
+  if (mode) return { index: String(mode.index), name: mode.name, palette: mode };
+  const hex = isHex(colour) ? colour.toLowerCase() : "#00b4ff";
+  return { index: "X", name: hex.slice(1), palette: paletteFor(hex) };
+}
+
+export const designOf = (v: Variant): Design => ({
+  lines: [v.line1, v.line2],
+  palette: colourInfo(v.colour).palette,
+  slots: v.slots,
+  placement: v.placement,
+});
+
+export const variantLabel = (v: Variant) => `${v.line1} ${v.line2} · ${colourInfo(v.colour).name}`;
+
+// ---------------------------------------------------------------------------
+// URL hash: base64url JSON, empty for the default state
+
+function sanitizeVariant(raw: unknown): Variant | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const str = (v: unknown, max: number) => (typeof v === "string" ? v.toUpperCase().slice(0, max) : null);
+  const colour = typeof r.colour === "string" && (CI_MODES.some((m) => m.id === r.colour) || isHex(r.colour)) ? r.colour : DEFAULT_VARIANT.colour;
+  const slots = { ...DEFAULT_SLOTS };
+  if (r.slots && typeof r.slots === "object") for (const s of SLOTS) {
+    const v = (r.slots as Record<string, unknown>)[s];
+    if (typeof v === "string" && /^(banner:|asset:)[\w-]+$|^empty$/.test(v)) slots[s] = v;
+  }
+  return {
+    line1: str(r.line1, 14) ?? DEFAULT_VARIANT.line1,
+    line2: str(r.line2, 14) ?? DEFAULT_VARIANT.line2,
+    colour,
+    slots,
+    placement: r.placement === "centered" ? "centered" : "lockscreen",
+  };
+}
+
+const b64urlEncode = (s: string) => btoa(String.fromCharCode(...new TextEncoder().encode(s))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const b64urlDecode = (s: string) => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0)));
 
 export function readState(hash: string): AppState {
-  const q = new URLSearchParams(hash.replace(/^#/, ""));
-  const st: AppState = { ...DEFAULT_STATE, slots: { ...DEFAULT_SLOTS }, selected: [...DEFAULT_STATE.selected] };
-  if (q.has("l1")) st.line1 = q.get("l1")!.toUpperCase().slice(0, 14);
-  if (q.has("l2")) st.line2 = q.get("l2")!.toUpperCase().slice(0, 14);
-  if (q.get("p") === "c") st.placement = "centered";
-  const c = q.get("c");
-  if (c && MODE_IDS.includes(c)) st.active = c;
-  if (q.has("s")) st.selected = q.get("s")!.split(",").filter((id) => MODE_IDS.includes(id));
-  const x = q.get("x");
-  if (x && /^[0-9a-f]{6}$/i.test(x)) st.custom = `#${x.toLowerCase()}`;
-  const b = q.get("b")?.split(",");
-  if (b?.length === SLOTS.length) SLOTS.forEach((slot, i) => b[i] && (st.slots[slot] = b[i]));
-  const z = q.get("z");
-  if (z && (z in SIZES || z === "custom")) st.size = z as AppState["size"];
-  st.w = clampSize(Number(q.get("w")), st.w);
-  st.h = clampSize(Number(q.get("h")), st.h);
+  const st = defaultState();
+  const raw = new URLSearchParams(hash.replace(/^#/, "")).get("s");
+  if (!raw) return st;
+  try {
+    const j = JSON.parse(b64urlDecode(raw)) as Record<string, unknown>;
+    const variants = Array.isArray(j.v) ? j.v.map(sanitizeVariant).filter((v): v is Variant => v !== null).slice(0, 64) : [];
+    if (variants.length) st.variants = variants;
+    st.active = Math.min(Math.max(0, Number(j.a) || 0), st.variants.length - 1);
+    const w = Number(j.w), h = Number(j.h);
+    if (Number.isFinite(w) && w >= 64 && w <= 16384) st.width = Math.round(w);
+    if (Number.isFinite(h) && h >= 64 && h <= 16384) st.height = Math.round(h);
+    if (FORMATS.some((f) => f.id === j.f)) st.format = j.f as Format;
+  } catch {
+    // broken link: start fresh
+  }
   return st;
 }
 
-/** Only what differs from the defaults ends up in the URL. */
 export function writeState(st: AppState): string {
-  const q = new URLSearchParams();
-  if (st.line1 !== DEFAULT_STATE.line1 || st.line2 !== DEFAULT_STATE.line2) {
-    q.set("l1", st.line1);
-    q.set("l2", st.line2);
-  }
-  if (st.placement === "centered") q.set("p", "c");
-  if (st.active !== DEFAULT_STATE.active) q.set("c", st.active);
-  if (st.selected.join(",") !== DEFAULT_STATE.selected.join(",")) q.set("s", st.selected.join(","));
-  if (st.custom !== DEFAULT_STATE.custom) q.set("x", st.custom.slice(1));
-  if (SLOTS.some((s) => st.slots[s] !== DEFAULT_SLOTS[s])) q.set("b", SLOTS.map((s) => st.slots[s]).join(","));
-  if (st.size !== DEFAULT_STATE.size) q.set("z", st.size);
-  if (st.size === "custom") {
-    q.set("w", String(st.w));
-    q.set("h", String(st.h));
-  }
-  return q.toString();
+  const d = defaultState();
+  if (JSON.stringify({ ...st }) === JSON.stringify(d)) return "";
+  return `s=${b64urlEncode(JSON.stringify({ v: st.variants, a: st.active, w: st.width, h: st.height, f: st.format }))}`;
 }
+
+// ---------------------------------------------------------------------------
+// File names
 
 const ascii = (s: string) =>
   s.replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/Ä/g, "Ae").replace(/Ö/g, "Oe").replace(/Ü/g, "Ue").replace(/ß/g, "ss");
 
-/** e.g. 40C3_SELF_HOSTED_4_Pink.png — the same scheme as the hand-made exports. */
-export function fileName(lines: readonly [string, string], mode: { index: string; name: string }, ext: string): string {
-  return `40C3_${slug(lines)}_${mode.index}_${ascii(mode.name).replace(/[^A-Za-z0-9]+/g, "")}.${ext}`;
+/** e.g. 40C3_SELF_HOSTED_4_Pink — the scheme of the hand-made exports. */
+export function baseName(v: Variant): string {
+  const c = colourInfo(v.colour);
+  return `40C3_${slug([v.line1, v.line2])}_${c.index}_${ascii(c.name).replace(/[^A-Za-z0-9]+/g, "")}`;
+}
+
+/** Unique file names for a list of variants (same slogan and colour get -2, -3 …). */
+export function fileNames(variants: readonly Variant[], ext: string): string[] {
+  const seen = new Map<string, number>();
+  return variants.map((v) => {
+    const b = baseName(v);
+    const n = (seen.get(b) ?? 0) + 1;
+    seen.set(b, n);
+    return `${b}${n > 1 ? `-${n}` : ""}.${ext}`;
+  });
 }

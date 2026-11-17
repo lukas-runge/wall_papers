@@ -19,9 +19,9 @@ export const BANNER_HEIGHT = 0.617;
  */
 export type Placement = "lockscreen" | "centered";
 
-export const PLACEMENTS: Record<Placement, { label: string; bannerTop: number; ovalCenterY: number }> = {
-  lockscreen: { label: "macOS lock screen", bannerTop: 0.2284, ovalCenterY: 0.52 },
-  centered: { label: "Centred", bannerTop: (1 - BANNER_HEIGHT) / 2, ovalCenterY: 0.5 },
+export const PLACEMENTS: Record<Placement, { bannerTop: number; ovalCenterY: number }> = {
+  lockscreen: { bannerTop: 0.2284, ovalCenterY: 0.52 },
+  centered: { bannerTop: (1 - BANNER_HEIGHT) / 2, ovalCenterY: 0.5 },
 };
 
 /** Hack Bold: advance width is 1233/2048 em. */
@@ -108,16 +108,6 @@ export function patternTiles(): { pattern: number; left: number; top: number; fl
     }
   }
   return tiles;
-}
-
-/** Hints for a nice wordmark: line 2 longer than line 1, nothing too wide. */
-export function wordmarkHints(lines: readonly [string, string]): string[] {
-  const [a, b] = lines.map((l) => [...l].length);
-  const hints: string[] = [];
-  if (a === 0 || b === 0) hints.push("Both lines need text.");
-  if (b <= a) hints.push("Looks best when line 2 is longer than line 1.");
-  if (Math.max(a, b) > 11) hints.push("More than 11 characters per line runs into the boxes.");
-  return hints;
 }
 
 /** File-name friendly version of the slogan. */

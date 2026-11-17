@@ -1,271 +1,264 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { zipSync } from "fflate";
-  import { CI_MODES, paletteFor, type Palette } from "#lib/colors";
-  import { DEFAULT_SLOTS, SLOTS, SLOT_LABELS, creatureCatalogue, type SlotId, type Slots } from "#lib/banner";
-  import { ASSETS } from "#lib/assets";
-  import { PLACEMENTS, slug, wordmarkHints, type Placement } from "#lib/layout";
-  import { canvasToBlob, renderWallpaper } from "#lib/render";
-  import { SIZES, fileName, readState, writeState, type AppState } from "#lib/state";
-
-  const PRESETS: [string, string][] = [
-    ["MODEL_", "CITIZENS"],
-    ["SELF_", "HOSTED"],
-    ["ESC_", "REALITY"],
-    ["::1_", "FIRST"],
-    ["MOSTLY_", "HARMLESS"],
-    ["ZERO_", "TRUST"],
-  ];
-  const catalogue = creatureCatalogue(ASSETS);
-  const groups = ["Banner", "Citizens", "Icons", "Other"] as const;
+  import { strToU8, zipSync } from "fflate";
+  import BoxPicker from "#components/BoxPicker";
+  import ColourPicker from "#components/ColourPicker";
+  import Segmented from "#components/Segmented";
+  import { CI_MODES } from "#lib/colors";
+  import { canvasToBlob, loadSources, renderWallpaper, svgDocument } from "#lib/render";
+  import { figcraftFile } from "#lib/figcraft";
+  import { wallpaperSvg } from "#lib/wallpaper";
+  import type { Placement } from "#lib/layout";
+  import {
+    FORMATS,
+    SIZES,
+    cloneVariant,
+    colourInfo,
+    designOf,
+    fileNames,
+    readState,
+    variantLabel,
+    writeState,
+    type AppState,
+    type Format,
+    type Variant,
+  } from "#lib/state";
 
   let s = $state<AppState>(readState(location.hash));
-
-  interface Mode { id: string; name: string; index: string; palette: Palette }
-  const modes = $derived<Mode[]>([
-    ...CI_MODES.map((m) => ({ id: m.id, name: m.name, index: String(m.index), palette: m })),
-    { id: "custom", name: "Own", index: "X", palette: paletteFor(s.custom) },
-  ]);
-  const active = $derived(modes.find((m) => m.id === s.active) ?? modes[0]);
-  const lines = $derived<[string, string]>([s.line1, s.line2]);
-  const hints = $derived(wordmarkHints(lines));
-  const size = $derived(s.size === "custom" ? { w: s.w, h: s.h } : SIZES[s.size]);
-  const batch = $derived(modes.filter((m) => s.selected.includes(m.id)));
+  const v = $derived(s.variants[s.active]);
+  const info = $derived(colourInfo(v.colour));
+  const sizeKey = $derived(`${s.width}x${s.height}`);
+  const isPreset = $derived(SIZES.some(([w, h]) => `${w}x${h}` === sizeKey));
+  let customSize = $state(false);
 
   let preview: HTMLCanvasElement;
-  let thumbs = $state<{ id: string; url: string }[]>([]);
+  let thumbs = $state<Record<string, string>>({});
   let status = $state("");
   let busy = $state(false);
 
-  // Theme of the page follows the colour in the preview.
+  const update = (patch: Partial<Variant>) => (s.variants[s.active] = { ...v, ...patch });
+
+  // Page colours follow the active variant.
   $effect(() => {
     const root = document.documentElement.style;
-    root.setProperty("--ground", active.palette.ground);
-    root.setProperty("--accent", active.palette.accent);
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", active.palette.ground);
+    root.setProperty("--ground", info.palette.ground);
+    root.setProperty("--accent", info.palette.accent);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", info.palette.ground);
   });
 
-  // Keep the state in the URL so a variant can be shared as a link.
+  // State lives in the URL, so a set of variants can be shared as a link.
   $effect(() => {
     const hash = writeState(s);
-    if (location.hash.slice(1) !== hash) history.replaceState(null, "", `#${hash}`);
+    if (location.hash.slice(1) !== hash) history.replaceState(null, "", hash ? `#${hash}` : location.pathname);
   });
 
-  // Re-render preview and thumbnails shortly after the last change.
-  let generation = 0;
+  // Preview of the active variant.
+  let previewGen = 0;
   $effect(() => {
-    const job = {
-      lines: [...lines] as [string, string],
-      slots: { ...s.slots },
-      placement: s.placement,
-      w: size.w,
-      h: size.h,
-      active: active,
-      batch: [...batch],
-    };
-    const g = ++generation;
-    const timer = setTimeout(() => void draw(job, g), 120);
-    return () => clearTimeout(timer);
+    const design = designOf(v), w = s.width, h = s.height;
+    const g = ++previewGen;
+    const t = setTimeout(async () => {
+      const pw = Math.min(1920, w), ph = Math.round((pw * h) / w);
+      try {
+        const c = await renderWallpaper(design, pw, ph);
+        if (g !== previewGen) return;
+        preview.width = pw;
+        preview.height = ph;
+        preview.getContext("2d")!.drawImage(c, 0, 0);
+      } catch (e) {
+        status = (e as Error).message;
+      }
+    }, 80);
+    return () => clearTimeout(t);
   });
 
-  async function draw(job: { lines: [string, string]; slots: Slots; placement: Placement; w: number; h: number; active: Mode; batch: Mode[] }, g: number) {
-    const pw = Math.min(1920, job.w), ph = Math.round((pw * job.h) / job.w);
-    try {
-      await renderWallpaper({ width: pw, height: ph, palette: job.active.palette, lines: job.lines, slots: job.slots, placement: job.placement }, preview);
-      const tw = 480, th = Math.round((tw * job.h) / job.w);
-      const next: { id: string; url: string }[] = [];
-      for (const m of job.batch) {
-        if (g !== generation) return;
-        const c = await renderWallpaper({ width: tw, height: th, palette: m.palette, lines: job.lines, slots: job.slots, placement: job.placement });
-        next.push({ id: m.id, url: URL.createObjectURL(await canvasToBlob(c)) });
+  // Thumbnails of all variants (cached by content and aspect ratio).
+  const thumbKey = (x: Variant) => `${JSON.stringify(x)}@${s.width}x${s.height}`;
+  $effect(() => {
+    const todo = s.variants.map((x) => ({ key: thumbKey(x), design: designOf(x) })).filter((x) => !thumbs[x.key]);
+    if (!todo.length) return;
+    const t = setTimeout(async () => {
+      const tw = 400, th = Math.round((tw * s.height) / s.width);
+      for (const x of todo) {
+        if (thumbs[x.key]) continue;
+        const c = await renderWallpaper(x.design, tw, th);
+        thumbs[x.key] = URL.createObjectURL(await canvasToBlob(c));
       }
-      if (g !== generation) return next.forEach((t) => URL.revokeObjectURL(t.url));
-      thumbs.forEach((t) => URL.revokeObjectURL(t.url));
-      thumbs = next;
-      if (!busy) status = "";
-    } catch (e) {
-      status = `Preview failed: ${(e as Error).message}`;
-    }
+    }, 300);
+    return () => clearTimeout(t);
+  });
+
+  function addVariant() {
+    s.variants.push(cloneVariant(v));
+    s.active = s.variants.length - 1;
+  }
+  function addAllColours() {
+    const have = new Set(s.variants.filter((x) => x.line1 === v.line1 && x.line2 === v.line2).map((x) => x.colour));
+    for (const m of CI_MODES) if (!have.has(m.id)) s.variants.push({ ...cloneVariant(v), colour: m.id });
+  }
+  function removeVariant(i: number) {
+    if (s.variants.length === 1) return;
+    s.variants.splice(i, 1);
+    s.active = Math.min(s.active, s.variants.length - 1);
   }
 
-  function save(blob: Blob, name: string) {
+  function save(data: Blob, name: string) {
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
+    a.href = URL.createObjectURL(data);
     a.download = name;
     a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
 
-  async function renderFull(m: Mode): Promise<Blob> {
-    const c = await renderWallpaper({ width: size.w, height: size.h, palette: m.palette, lines, slots: s.slots, placement: s.placement });
+  async function encode(x: Variant, format: Format): Promise<Uint8Array> {
+    if (format === "svg") return strToU8(await svgDocument(designOf(x), s.width, s.height));
+    const c = await renderWallpaper(designOf(x), s.width, s.height);
     try {
-      return await canvasToBlob(c);
+      return new Uint8Array(await (await canvasToBlob(c)).arrayBuffer());
     } finally {
       c.width = c.height = 0;
     }
   }
 
-  async function downloadOne() {
+  async function figcraft(list: Variant[]): Promise<Uint8Array> {
+    const src = await loadSources();
+    const frames = list.map((x) => ({ name: variantLabel(x), svg: wallpaperSvg(designOf(x), s.width, s.height, { ...src, fontBase64: undefined }) }));
+    const tc = await renderWallpaper(designOf(list[0]), 512, Math.round((512 * s.height) / s.width));
+    return figcraftFile(frames, "WALL_PAPERS", new Uint8Array(await (await canvasToBlob(tc)).arrayBuffer()));
+  }
+
+  const mime: Record<Format, string> = { png: "image/png", svg: "image/svg+xml", figcraft: "application/zip" };
+
+  async function run(task: () => Promise<void>) {
     busy = true;
-    status = `Rendering ${size.w} × ${size.h} …`;
+    status = "";
     try {
-      save(await renderFull(active), fileName(lines, active, "png"));
-      status = "Done.";
+      await task();
     } catch (e) {
-      status = `${(e as Error).message}. Try a smaller size or another browser.`;
+      status = `${(e as Error).message}`;
     } finally {
       busy = false;
     }
   }
 
-  async function downloadZip() {
-    busy = true;
-    try {
-      const files: Record<string, Uint8Array> = {};
-      for (const [i, m] of batch.entries()) {
-        status = `Rendering ${m.name} (${i + 1}/${batch.length}) …`;
-        files[fileName(lines, m, "png")] = new Uint8Array(await (await renderFull(m)).arrayBuffer());
+  const downloadVariant = () =>
+    run(async () => {
+      const ext = FORMATS.find((f) => f.id === s.format)!.ext;
+      const [name] = fileNames([v], ext);
+      status = "Rendering …";
+      const data = s.format === "figcraft" ? await figcraft([v]) : await encode(v, s.format);
+      save(new Blob([data as Uint8Array<ArrayBuffer>], { type: mime[s.format] }), name);
+      status = "";
+    });
+
+  const downloadAll = () =>
+    run(async () => {
+      if (s.format === "figcraft") {
+        status = `Rendering ${s.variants.length} variants …`;
+        save(new Blob([(await figcraft(s.variants)) as Uint8Array<ArrayBuffer>], { type: mime.figcraft }), "WALL_PAPERS.figcraft");
+        status = "";
+        return;
       }
-      status = "Packing …";
-      const zip = zipSync(files, { level: 0 });
-      save(new Blob([zip as Uint8Array<ArrayBuffer>], { type: "application/zip" }), `40C3_${slug(lines)}.zip`);
-      status = `Done: ${batch.length} wallpapers.`;
-    } catch (e) {
-      status = `${(e as Error).message}. Try a smaller size or another browser.`;
-    } finally {
-      busy = false;
-    }
-  }
-
-  function toggleSelected(id: string) {
-    s.selected = s.selected.includes(id) ? s.selected.filter((x) => x !== id) : [...s.selected, id];
-  }
-
-  const upper = (v: string) => v.toUpperCase();
+      const ext = FORMATS.find((f) => f.id === s.format)!.ext;
+      const names = fileNames(s.variants, ext);
+      const files: Record<string, Uint8Array> = {};
+      for (const [i, x] of s.variants.entries()) {
+        status = `Rendering ${i + 1} / ${s.variants.length} …`;
+        files[names[i]] = await encode(x, s.format);
+      }
+      save(new Blob([zipSync(files, { level: s.format === "svg" ? 6 : 0 }) as Uint8Array<ArrayBuffer>], { type: "application/zip" }), "WALL_PAPERS.zip");
+      status = "";
+    });
 
   onMount(() => {
     const onHash = () => (s = readState(location.hash));
     addEventListener("hashchange", onHash);
     return () => removeEventListener("hashchange", onHash);
   });
+
+  const LAYOUTS: { id: Placement; label: string }[] = [
+    { id: "centered", label: "Centred" },
+    { id: "lockscreen", label: "macOS lock screen" },
+  ];
 </script>
 
 <header class="masthead">
-  <h1 class="wordmark" aria-label="WALL_PAPERS">
-    <span>WALL<span class="cursor">_</span></span><span>PAPERS</span>
-  </h1>
-  <p class="tagline">Wallpapers for <strong>40C3 · MODEL_ CITIZENS</strong>, made right here in your browser.</p>
+  <h1 class="wordmark" aria-label="WALL_PAPERS"><span>WALL<span class="cursor">_</span></span><span>PAPERS</span></h1>
 </header>
 
 <main class="layout">
-  <section class="preview" aria-label="Preview">
-    <div class="frame"><canvas bind:this={preview} aria-label="Wallpaper preview"></canvas></div>
-    <p class="status" role="status">{status}</p>
-    {#if thumbs.length}
-      <h2>Selected colours</h2>
-      <div class="thumbs">
-        {#each thumbs as t (t.id)}
-          {@const m = modes.find((x) => x.id === t.id)}
-          <button type="button" class="thumb" class:on={t.id === s.active} onclick={() => (s.active = t.id)} aria-label="Preview {m?.name}">
-            <img src={t.url} alt="" />
-            <span>{m?.index}. {m?.name}</span>
+  <section class="stage">
+    <div class="frame"><canvas bind:this={preview} aria-label="Preview of {variantLabel(v)}"></canvas></div>
+
+    <h2>Variants</h2>
+    <div class="variants">
+      {#each s.variants as x, i (i)}
+        <div class="variant" class:on={i === s.active}>
+          <button type="button" class="pick" onclick={() => (s.active = i)} aria-label="Edit {variantLabel(x)}" aria-pressed={i === s.active}>
+            {#if thumbs[thumbKey(x)]}<img src={thumbs[thumbKey(x)]} alt="" />{:else}<span class="placeholder"></span>{/if}
+            <span class="name">{variantLabel(x)}</span>
           </button>
-        {/each}
+          {#if s.variants.length > 1}
+            <button type="button" class="remove" onclick={() => removeVariant(i)} aria-label="Remove {variantLabel(x)}" title="Remove">×</button>
+          {/if}
+        </div>
+      {/each}
+      <div class="add">
+        <button type="button" class="quiet" onclick={addVariant}>+ Variant</button>
+        <button type="button" class="quiet" onclick={addAllColours}>+ All colours</button>
       </div>
-    {/if}
+    </div>
   </section>
 
-  <form class="controls" onsubmit={(e) => e.preventDefault()} autocomplete="off">
+  <aside class="panel">
     <fieldset>
-      <legend>Slogan</legend>
-      <label>Line 1 <input value={s.line1} oninput={(e) => (s.line1 = upper(e.currentTarget.value))} maxlength="14" spellcheck="false" /></label>
-      <label>Line 2 <input value={s.line2} oninput={(e) => (s.line2 = upper(e.currentTarget.value))} maxlength="14" spellcheck="false" /></label>
-      <div class="chips">
-        {#each PRESETS as [a, b] (a + b)}
-          <button type="button" class="chip" class:on={a === s.line1 && b === s.line2} onclick={() => ((s.line1 = a), (s.line2 = b))}>{a} {b}</button>
-        {/each}
-      </div>
-      {#if hints.length}
-        <ul class="hints">{#each hints as h (h)}<li>{h}</li>{/each}</ul>
-      {/if}
+      <legend>Text</legend>
+      <label>Line 1 <input value={v.line1} oninput={(e) => update({ line1: e.currentTarget.value.toUpperCase() })} maxlength="14" spellcheck="false" /></label>
+      <label>Line 2 <input value={v.line2} oninput={(e) => update({ line2: e.currentTarget.value.toUpperCase() })} maxlength="14" spellcheck="false" /></label>
     </fieldset>
 
     <fieldset>
-      <legend>Placement</legend>
-      <label class="switch">
-        <input type="checkbox" role="switch" checked={s.placement === "lockscreen"} onchange={(e) => (s.placement = e.currentTarget.checked ? "lockscreen" : "centered")} />
-        <span class="track" aria-hidden="true"></span>
-        <span>{PLACEMENTS.lockscreen.label}</span>
-      </label>
-      <p class="note">
-        {s.placement === "lockscreen"
-          ? "Banner sits between clock and login, like the original wallpaper."
-          : "Banner and pattern are centred: neutral, for any screen."}
-      </p>
-    </fieldset>
-
-    <fieldset>
-      <legend>Colours</legend>
-      <p class="note">Click to preview, tick to include in the ZIP.</p>
-      <div class="swatches">
-        {#each modes as m (m.id)}
-          <div class="swatch" class:on={m.id === s.active} style="--c: {m.palette.accent}; --g: {m.palette.ground}">
-            <button type="button" onclick={() => (s.active = m.id)} aria-label="Preview {m.name}">
-              <span class="dot"></span><span>{m.index}. {m.name}</span>
-            </button>
-            <input type="checkbox" checked={s.selected.includes(m.id)} onchange={() => toggleSelected(m.id)} aria-label="Include {m.name}" />
-          </div>
-        {/each}
-      </div>
-      <label class="custom">Own colour
-        <input type="color" value={s.custom} oninput={(e) => ((s.custom = e.currentTarget.value), (s.active = "custom"))} />
-      </label>
-      <p class="note">The background is derived from it the same way as for the CI colours.</p>
+      <legend>Colour</legend>
+      <ColourPicker value={v.colour} onchange={(colour) => update({ colour })} />
     </fieldset>
 
     <fieldset>
       <legend>Boxes</legend>
-      <div class="slots">
-        {#each SLOTS as slot (slot)}
-          <label>{SLOT_LABELS[slot]}
-            <select value={s.slots[slot]} onchange={(e) => (s.slots = { ...s.slots, [slot as SlotId]: e.currentTarget.value })}>
-              {#each groups as g (g)}
-                <optgroup label={g === "Banner" ? "From the banner" : g}>
-                  {#each catalogue.filter((c) => c.group === g) as c (c.id)}
-                    <option value={c.id}>{c.label}</option>
-                  {/each}
-                </optgroup>
-              {/each}
-            </select>
-          </label>
-        {/each}
-      </div>
-      <button type="button" class="quiet small" onclick={() => (s.slots = { ...DEFAULT_SLOTS })}>Back to the original citizens</button>
+      <BoxPicker slots={v.slots} palette={info.palette} onchange={(slots) => update({ slots })} />
     </fieldset>
 
     <fieldset>
-      <legend>Size</legend>
-      <select value={s.size} onchange={(e) => (s.size = e.currentTarget.value as AppState["size"])}>
-        {#each Object.entries(SIZES) as [id, z] (id)}
-          <option value={id}>{z.label} · {z.w} × {z.h}</option>
-        {/each}
-        <option value="custom">Custom size</option>
-      </select>
-      {#if s.size === "custom"}
-        <div class="custom-size">
-          <label>Width <input type="number" min="320" max="16384" bind:value={s.w} /></label>
-          <label>Height <input type="number" min="240" max="16384" bind:value={s.h} /></label>
-        </div>
-      {/if}
+      <legend>Layout</legend>
+      <Segmented label="Layout" options={LAYOUTS} value={v.placement} onchange={(placement) => update({ placement })} />
     </fieldset>
 
-    <div class="actions">
-      <button type="button" class="loud" disabled={busy} onclick={downloadOne}>Download PNG</button>
-      <button type="button" class="quiet" disabled={busy || batch.length === 0} onclick={downloadZip}>
-        {batch.length} colours as ZIP
-      </button>
-    </div>
-  </form>
+    <fieldset>
+      <legend>Export</legend>
+      <label>Size
+        <select
+          value={customSize || !isPreset ? "custom" : sizeKey}
+          onchange={(e) => {
+            const val = e.currentTarget.value;
+            customSize = val === "custom";
+            if (!customSize) [s.width, s.height] = val.split("x").map(Number);
+          }}
+        >
+          {#each SIZES as [w, h] (`${w}x${h}`)}<option value="{w}x{h}">{w} × {h}</option>{/each}
+          <option value="custom">Custom</option>
+        </select>
+      </label>
+      {#if customSize || !isPreset}
+        <div class="custom-size">
+          <label>Width <input type="number" min="64" max="16384" value={s.width} onchange={(e) => (s.width = Math.min(16384, Math.max(64, Math.round(+e.currentTarget.value || 0))))} /></label>
+          <label>Height <input type="number" min="64" max="16384" value={s.height} onchange={(e) => (s.height = Math.min(16384, Math.max(64, Math.round(+e.currentTarget.value || 0))))} /></label>
+        </div>
+      {/if}
+      <Segmented label="Format" options={FORMATS} value={s.format} onchange={(f) => (s.format = f)} />
+      <button type="button" class="loud" disabled={busy} onclick={downloadVariant}>Download variant</button>
+      <button type="button" class="quiet" disabled={busy} onclick={downloadAll}>Download all variants</button>
+      {#if status}<p class="status" role="status">{status}</p>{/if}
+    </fieldset>
+  </aside>
 </main>
 
 <footer class="footer">
@@ -273,21 +266,18 @@
     Design assets: <a href="https://events.ccc.de/">40C3 styleguide</a> by the 40C3 design team.
     Fonts: <a href="https://sourcefoundry.org/hack/">Hack</a> (MIT / Bitstream Vera),
     <a href="https://fonts.google.com/specimen/Jersey+10">Jersey 10</a> (OFL).
-    Unofficial fan tool, not by the CCC. <a href="https://github.com/lukas-runge/wall_papers">Source on GitHub</a>
+    Unofficial, not by the CCC. <a href="https://github.com/lukas-runge/wall_papers">Source</a>
   </p>
 </footer>
 
 <style>
   .masthead {
     padding: var(--gap) var(--gap) 0;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: end;
-    gap: 0.5rem 2rem;
   }
   .wordmark {
     margin: 0;
     display: grid;
+    width: max-content;
     font: 700 clamp(28px, 4vw, 44px) / 1.05 "Hack", monospace;
     color: var(--white);
     letter-spacing: 0.04em;
@@ -306,22 +296,15 @@
       animation: none;
     }
   }
-  .tagline {
-    margin: 0 0 0.3em;
-    color: var(--muted);
-  }
-  .tagline strong {
-    color: var(--white);
-  }
 
   .layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
     gap: var(--gap);
     padding: var(--gap);
     align-items: start;
   }
-  @media (max-width: 900px) {
+  @media (max-width: 960px) {
     .layout {
       grid-template-columns: minmax(0, 1fr);
     }
@@ -336,49 +319,84 @@
     width: 100%;
     height: auto;
   }
-  .status {
-    min-height: 1.5em;
-    color: var(--muted);
-    margin: 0.5em 0;
-  }
-  .preview h2 {
+  h2 {
     font-size: 1.6rem;
-    margin: 0.8em 0 0.4em;
-  }
-  .thumbs {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-    gap: 12px;
-  }
-  .thumb {
-    padding: 4px;
-    border: 1.5px solid var(--line);
-    background: none;
-    color: var(--muted);
-    font: 400 0.85rem "Hack", monospace;
-    text-align: left;
-    display: grid;
-    gap: 4px;
-  }
-  .thumb.on {
-    border-color: var(--accent);
-    color: var(--white);
-  }
-  .thumb img {
-    width: 100%;
-    display: block;
+    margin: 1rem 0 0.5rem;
   }
 
-  .controls {
+  .variants {
     display: grid;
-    gap: 1.1rem;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+  }
+  .variant {
+    position: relative;
+    border: 1.5px solid var(--line);
+  }
+  .variant.on {
+    border-color: var(--accent);
+  }
+  .pick {
+    display: grid;
+    gap: 4px;
+    width: 100%;
+    padding: 4px;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font: 400 0.8rem/1.3 "Hack", monospace;
+    text-align: left;
+  }
+  .variant.on .pick {
+    color: var(--white);
+  }
+  .pick img,
+  .placeholder {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    background: color-mix(in srgb, var(--white) 6%, var(--ground));
+  }
+  .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .remove {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 1.8rem;
+    height: 1.8rem;
+    padding: 0;
+    font: 700 1.1rem/1 "Hack", monospace;
+    background: var(--ground);
+    color: var(--white);
+    border-color: var(--line);
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .variant:hover .remove,
+  .remove:focus-visible {
+    opacity: 1;
+  }
+  .add {
+    display: grid;
+    gap: 8px;
+    align-content: center;
+  }
+
+  .panel {
+    display: grid;
+    gap: 1rem;
   }
   fieldset {
     margin: 0;
     border: 1.5px solid var(--line);
-    padding: 0.4rem 1rem 1rem;
+    padding: 0.3rem 1rem 1rem;
     display: grid;
-    gap: 0.6rem;
+    gap: 0.7rem;
     min-width: 0;
   }
   legend {
@@ -390,149 +408,22 @@
     gap: 0.25rem;
     color: var(--muted);
   }
-  input:not([type="checkbox"], [type="color"]) {
+  input:not([type="color"]) {
     color: var(--white);
   }
-  fieldset > label > input:not([type="checkbox"]) {
+  fieldset:first-of-type input {
     font-weight: 700;
     font-size: 1.1rem;
     letter-spacing: 0.05em;
-  }
-  .note {
-    margin: 0;
-    font-size: 0.85rem;
-    color: var(--muted);
-  }
-
-  .chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  .chip {
-    font: 700 0.8rem "Hack", monospace;
-    padding: 0.35em 0.6em;
-    background: none;
-    color: var(--muted);
-    border-color: var(--line);
-  }
-  .chip.on {
-    color: var(--ground);
-    background: var(--accent);
-    border-color: var(--accent);
-  }
-  .hints {
-    margin: 0;
-    padding-left: 1.2em;
-    color: var(--accent);
-    font-size: 0.85rem;
-  }
-
-  .switch {
-    display: flex;
-    align-items: center;
-    gap: 0.7rem;
-    color: var(--white);
-    cursor: pointer;
-  }
-  .switch input {
-    position: absolute;
-    opacity: 0;
-    pointer-events: none;
-  }
-  .track {
-    flex: none;
-    width: 2.6rem;
-    height: 1.4rem;
-    border: 1.5px solid var(--accent);
-    position: relative;
-  }
-  .track::after {
-    content: "";
-    position: absolute;
-    top: 3px;
-    left: 3px;
-    width: calc(1.4rem - 9px);
-    height: calc(1.4rem - 9px);
-    background: var(--line);
-    transition: transform 0.15s;
-  }
-  .switch input:checked + .track::after {
-    transform: translateX(1.2rem);
-    background: var(--accent);
-  }
-  .switch input:focus-visible + .track {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-
-  .swatches {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
-  }
-  .swatch {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    border: 1.5px solid var(--line);
-    padding-right: 6px;
-  }
-  .swatch.on {
-    border-color: var(--c);
-  }
-  .swatch button {
-    flex: 1;
-    border: 0;
-    background: none;
-    color: var(--white);
-    font: 400 0.85rem "Hack", monospace;
-    display: flex;
-    align-items: center;
-    gap: 0.5em;
-    padding: 0.45em 0.5em;
-    text-align: left;
-  }
-  .dot {
-    flex: none;
-    width: 1.1em;
-    height: 1.1em;
-    border-radius: 50%;
-    background: var(--c);
-    box-shadow: 0 0 0 3px var(--g);
-  }
-  .swatch input {
-    accent-color: var(--c);
-  }
-  .custom {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-  }
-  input[type="color"] {
-    width: 3rem;
-    height: 2rem;
-    border: 1.5px solid var(--line);
-    background: none;
-    padding: 2px;
-  }
-
-  .slots {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.6rem;
-    grid-auto-flow: column;
-    grid-template-rows: repeat(3, auto);
   }
   .custom-size {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.6rem;
   }
-
-  .actions {
-    display: grid;
-    gap: 0.6rem;
+  .status {
+    margin: 0;
+    color: var(--muted);
   }
 
   .footer {
