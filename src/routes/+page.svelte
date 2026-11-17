@@ -211,7 +211,7 @@
     if (introPlayed) return;
     introPlayed = true;
     intro = true;
-    setTimeout(() => (intro = false), 3600);
+    setTimeout(() => (intro = false), 2000);
   }
   /** Wave order of the hint: left column, text, right column. */
   const HINT_ORDER: Record<string, number> = { L1: 0, L2: 1, L3: 2, line0: 3, line1: 4, R1: 5, R2: 6, R3: 7 };
@@ -690,13 +690,13 @@
     outline: none;
   }
 
-  /* Intro: every clickable part lights up as a wave from left to right,
-     with a glint sweeping over it and a few sparkles around it. */
+  /* Intro, once: every clickable part lights up as a wave from left to right,
+     with a glint sweeping over it and a twinkle at its corner. */
   .intro .hotspot,
   .intro .text-hotspot {
-    --at: calc(350ms + var(--hint) * 110ms);
+    --at: calc(250ms + var(--hint) * 80ms);
     overflow: visible;
-    animation: hint 1s ease-in-out var(--at) 2 both;
+    animation: hint 0.9s ease-in-out var(--at) both;
   }
   @keyframes hint {
     0%,
@@ -726,7 +726,7 @@
     background-size: 300% 100%;
     mix-blend-mode: screen;
     opacity: 0;
-    animation: glint 0.9s ease-out calc(var(--at) + 200ms) 2;
+    animation: glint 0.7s ease-out calc(var(--at) + 150ms);
   }
   @keyframes glint {
     0% {
@@ -747,13 +747,10 @@
     right: -0.45em;
     font: 400 2.4cqw/1 sans-serif;
     color: #fff;
-    text-shadow:
-      -3.4cqw 4.6cqw 0 var(--accent),
-      0.6cqw 5.2cqw 0 #fff,
-      -2cqw -0.4cqw 0 var(--accent);
+    text-shadow: -2cqw -0.4cqw 0 var(--accent);
     pointer-events: none;
     scale: 0;
-    animation: twinkle 0.8s ease-in-out calc(var(--at) + 150ms) 3;
+    animation: twinkle 0.7s ease-in-out calc(var(--at) + 150ms);
   }
   @keyframes twinkle {
     0%,
