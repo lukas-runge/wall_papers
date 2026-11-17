@@ -15,7 +15,7 @@ const raw = import.meta.glob<string>("./assets/creatures/*.svg", { query: "?raw"
 const CITIZENS = new Set(["Adam", "Barbara", "bip", "Blahaj", "Luckycat", "Mona"]);
 const LABELS: Record<string, string> = {
   Blahaj: "Blåhaj",
-  Mona: "Mona (colour)",
+  Mona: "Mona (solid)",
   Icon_10: "Icon 10",
   Icon_HelloThere: "Hello there",
   Icon_KeyShort: "Key",

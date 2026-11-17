@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { bannerParts } from "./generated/banner-parts";
 import { CI_MODES } from "./colors";
+import { ASSETS } from "./assets";
 import {
   DEFAULT_SLOTS,
   SLOTS,
@@ -11,7 +12,7 @@ import {
   embedAsset,
   flattenSvg,
   inlineClasses,
-  mapAssetColour,
+  assetTone,
   parseClassRules,
   slotContent,
 } from "./banner";
@@ -68,24 +69,63 @@ describe("colours", () => {
     expect(bannerColour(pink)("#6ab143")).toBe(pink.accent);
     expect(bannerColour(pink)("#e7edea")).toBe("#e7edea");
   });
-  it("maps styleguide asset colours onto the palette", () => {
-    expect(mapAssetColour("#75b44b", pink)).toBe(pink.accent);
-    expect(mapAssetColour("#ebedf0", pink)).toBe("#e7edea");
-    expect(mapAssetColour("#001300", pink)).toBe(pink.ground);
+  it("turns styleguide assets into ink and paper", () => {
+    expect(assetTone("Icon_Cat", "#75b44b")).toBe("ink");
+    expect(assetTone("Icon_Cat", "#ebedf0")).toBe("ink");
+    expect(assetTone("Adam", "#001300")).toBe("paper");
+    // Blåhaj keeps its teeth: the pink square is ink, white is paper
+    expect(assetTone("Blahaj", "#ea6f82")).toBe("ink");
+    expect(assetTone("Blahaj", "#ebedf0")).toBe("paper");
+    // the star has only a dark colour
+    expect(assetTone("Star", "#001300")).toBe("ink");
+  });
+});
+
+describe("two colours per box", () => {
+  const coloursOf = (markup: string) => new Set([...markup.matchAll(/(?:fill|stroke)="(#[0-9a-f]{6})"/gi)].map((m) => m[1].toLowerCase()));
+  for (const palette of [CI_MODES[0], pink]) {
+    it(`corner boxes are white on dark, middle boxes accent on dark (${palette.name})`, () => {
+      const options = [...Object.keys(bannerParts.creatures).map((id) => `banner:${id}`), ...ASSETS.map((a) => `asset:${a.id}`)];
+      for (const slot of SLOTS) {
+        const allowed = slot === "L2" || slot === "R2" ? [palette.lines, palette.frame, palette.ground] : ["#e7edea", palette.ground];
+        for (const id of options) {
+          for (const c of coloursOf(slotContent(slot, id, palette, ASSETS))) expect(allowed, `${slot} ${id} ${c}`).toContain(c);
+        }
+      }
+    });
+  }
+
+  it("keeps both tones of every asset in every box (nothing turns into a blank box)", () => {
+    for (const palette of [CI_MODES[0], pink])
+      for (const slot of SLOTS)
+        for (const a of ASSETS) {
+          const cols = coloursOf(slotContent(slot, `asset:${a.id}`, palette, ASSETS));
+          const ink = slot === "L2" || slot === "R2" ? palette.lines : "#e7edea";
+          expect(cols, `${slot} ${a.id}`).toContain(ink);
+        }
+  });
+
+  it("moves a white figure into a middle box in the accent colour", () => {
+    expect(slotContent("R2", "banner:mona", pink, [])).toContain(`fill="${pink.accent}"`);
+    expect(slotContent("R2", "banner:mona", pink, [])).not.toContain('fill="#e7edea"');
+  });
+
+  it("moves the accent X into a corner box in white", () => {
+    expect(slotContent("L1", "banner:cross", pink, [])).toContain('stroke="#e7edea"');
   });
 });
 
 describe("assets", () => {
   const svg = `<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 20"><defs><style>.cls-1{fill:#75b44b}</style><clipPath id="clippath"><rect width="1" height="1"/></clipPath></defs><path class="cls-1" clip-path="url(#clippath)" d="M0 0h10v20z"/></svg>`;
   it("inlines classes, prefixes ids and recolours", () => {
-    const out = embedAsset(svg, "a-L1-", bannerParts.frames.L1.box, pink);
+    const out = embedAsset(svg, "a-L1-", bannerParts.frames.L1.box, { ink: pink.accent, paper: pink.ground });
     expect(out).not.toContain("class=");
     expect(out).toContain(`fill="${pink.accent}"`);
     expect(out).toContain('id="a-L1-clippath"');
     expect(out).toContain("url(#a-L1-clippath)");
   });
   it("fits the asset inside the frame", () => {
-    const out = embedAsset(svg, "p-", bannerParts.frames.L1.box, pink);
+    const out = embedAsset(svg, "p-", bannerParts.frames.L1.box, { ink: "#e7edea", paper: pink.ground });
     const h = Number(/height="([\d.]+)"/.exec(out)![1]);
     const [, y0, , y1] = bannerParts.frames.L1.box;
     expect(h).toBeLessThan(y1 - y0);

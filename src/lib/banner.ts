@@ -111,8 +111,11 @@ export function viewBox(svg: string): [number, number, number, number] {
 
 /** Inner markup of a self-contained SVG file with its classes inlined. */
 export function flattenSvg(svg: string, colour?: (hex: string) => string): string {
-  const inner = inlineClasses(stripSvgWrapper(svg), parseClassRules(styleOf(svg)), colour);
-  return colour ? inner.replace(/(fill|stroke|stop-color)="(#[0-9a-f]{3,6})"/gi, (_, a: string, h: string) => `${a}="${colour(h)}"`) : inner;
+  // Recolour attributes first, then inline the classes (recoloured as well):
+  // every colour goes through `colour` exactly once.
+  let inner = stripSvgWrapper(svg);
+  if (colour) inner = inner.replace(/(fill|stroke|stop-color)="(#[0-9a-f]{3,6})"/gi, (_, a: string, h: string) => `${a}="${colour(h)}"`);
+  return inlineClasses(inner, parseClassRules(styleOf(svg)), colour);
 }
 
 // ---------------------------------------------------------------------------
@@ -120,16 +123,6 @@ export function flattenSvg(svg: string, colour?: (hex: string) => string): strin
 
 const CI_HEX = new Set([...CI_MODES.map((m) => m.accent), "#ffbb40"]);
 const expandHex = (h: string) => (h.length === 4 ? `#${h[1]}${h[1]}${h[2]}${h[2]}${h[3]}${h[3]}` : h);
-
-/** Colour of a styleguide asset mapped onto the wallpaper palette. */
-export function mapAssetColour(hex: string, palette: Palette): string {
-  const h = expandHex(hex.toLowerCase());
-  if (CI_HEX.has(h)) return palette.accent;
-  const lum = relativeLuminance(h);
-  if (lum > 0.6) return BANNER_WHITE;
-  if (lum < 0.02) return palette.ground;
-  return palette.accent;
-}
 
 /** Banner colours: the two greens of the original become the palette. */
 export function bannerColour(palette: Palette): (hex: string) => string {
@@ -143,16 +136,47 @@ export function bannerColour(palette: Palette): (hex: string) => string {
 
 const bannerRules = () => parseClassRules(bannerParts.style);
 
+/**
+ * Box contents are always two colours: ink on the dark ground. The four corner
+ * boxes use white ink, the two middle boxes the accent colour (as in the
+ * original banner).
+ */
+export const isMiddle = (slot: SlotId) => slot === "L2" || slot === "R2";
+export const inkFor = (slot: SlotId, palette: Palette) => (isMiddle(slot) ? palette.lines : BANNER_WHITE);
+
+type Tone = "ink" | "paper";
+
+/**
+ * How each styleguide asset becomes two-tone. Default: dark colours are paper,
+ * everything else is ink. Some assets keep their details only the other way
+ * round (CI colour is ink, white is paper); the star has only a dark colour.
+ */
+const ASSET_TONES: Record<string, "ci-ink" | Record<string, Tone>> = {
+  Blahaj: "ci-ink",
+  Icon_Blob0: "ci-ink",
+  Luckycat: "ci-ink",
+  Star: { "#001300": "ink" },
+};
+
+export function assetTone(assetId: string, hex: string): Tone {
+  const h = expandHex(hex.toLowerCase());
+  const rule = ASSET_TONES[assetId];
+  if (rule && rule !== "ci-ink" && rule[h]) return rule[h];
+  if (relativeLuminance(h) < 0.02) return "paper";
+  if (rule === "ci-ink") return CI_HEX.has(h) ? "ink" : "paper";
+  return "ink";
+}
+
 // ---------------------------------------------------------------------------
 // Boxes
 
 const r = (v: number) => Math.round(v * 1000) / 1000;
 const r2 = (v: number) => Math.round(v * 100) / 100;
 
-/** Inline a styleguide asset into a box: classes inlined, ids prefixed, recoloured, fitted into the frame. */
-export function embedAsset(svg: string, prefix: string, box: Box, palette: Palette): string {
+/** Inline a styleguide asset into a box: classes inlined, ids prefixed, two-tone, fitted into the frame. */
+export function embedAsset(svg: string, prefix: string, box: Box, tones: { ink: string; paper: string }, assetId = ""): string {
   const [, , vw, vh] = viewBox(svg);
-  const inner = flattenSvg(svg, (h) => mapAssetColour(h, palette))
+  const inner = flattenSvg(svg, (h) => tones[assetTone(assetId, h)])
     .replace(/\sid="([^"]*)"/g, ` id="${prefix}$1"`)
     .replace(/url\(#([^)]*)\)/g, `url(#${prefix}$1)`);
   // Fit into the inside of the frame with some air around it.
@@ -174,29 +198,38 @@ export function crossMarkup(box: Box): string {
   );
 }
 
-/** Box content for one slot in banner coordinates (banner classes not yet inlined). */
-function slotContentRaw(slot: SlotId, creature: string, palette: Palette, assets: readonly AssetSource[]): string {
+/** Box content for one slot, colours inline and two-tone for its box. */
+export function slotContent(slot: SlotId, creature: string, palette: Palette, assets: readonly AssetSource[]): string {
   const box = frameBox(slot);
+  const ink = inkFor(slot, palette);
   if (creature.startsWith("banner:")) {
     const c = bannerParts.creatures[creature.slice(7) as CreatureId];
     if (!c) return "";
-    if (c.slot === slot) return c.markup;
-    if (c.anchor === "fill") return crossMarkup(box);
-    const from = frameBox(c.slot);
-    const dx = (box[0] + box[2]) / 2 - (from[0] + from[2]) / 2;
-    const dy = c.anchor === "bottom" ? box[3] - from[3] : (box[1] + box[3]) / 2 - (from[1] + from[3]) / 2;
-    return `<g transform="translate(${r(dx)} ${r(dy)})">${c.markup}</g>`;
+    let markup: string;
+    if (c.slot === slot) markup = c.markup;
+    else if (c.anchor === "fill") markup = crossMarkup(box);
+    else {
+      const from = frameBox(c.slot);
+      const dx = (box[0] + box[2]) / 2 - (from[0] + from[2]) / 2;
+      const dy = c.anchor === "bottom" ? box[3] - from[3] : (box[1] + box[3]) / 2 - (from[1] + from[3]) / 2;
+      markup = `<g transform="translate(${r(dx)} ${r(dy)})">${c.markup}</g>`;
+    }
+    // The line drawings use white, or the banner greens in the middle boxes:
+    // the middle keeps its greens (exactly the original), anything else becomes the ink.
+    const base = bannerColour(palette);
+    const colour = (h: string) => {
+      const mapped = base(h);
+      if (isMiddle(slot)) return expandHex(h.toLowerCase()) === "#e7edea" ? ink : mapped;
+      return ink;
+    };
+    return inlineClasses(markup, bannerRules(), colour);
   }
   if (creature.startsWith("asset:")) {
-    const asset = assets.find((a) => a.id === creature.slice(6));
-    return asset ? embedAsset(asset.svg, `a-${slot}-`, box, palette) : "";
+    const id = creature.slice(6);
+    const asset = assets.find((a) => a.id === id);
+    return asset ? embedAsset(asset.svg, `a-${slot}-`, box, { ink, paper: palette.ground }, id) : "";
   }
   return "";
-}
-
-/** Box content for one slot, colours inline. */
-export function slotContent(slot: SlotId, creature: string, palette: Palette, assets: readonly AssetSource[]): string {
-  return inlineClasses(slotContentRaw(slot, creature, palette, assets), bannerRules(), bannerColour(palette));
 }
 
 /** One box (frame, fill and content) as a small standalone SVG, for pickers. */

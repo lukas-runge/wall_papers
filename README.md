@@ -23,8 +23,10 @@ rendered on your machine.
   (Helmholtz–Kohlrausch corrected) as the original `#000d00`, hue of the
   accent. Green keeps the original values exactly.
 - **Boxes.** Each of the six boxes takes one of the banner's line drawings, a
-  citizen or an icon from the styleguide (recoloured to the palette), or stays
-  empty, picked from a gallery that shows every option in that box.
+  citizen or an icon from the styleguide, or stays empty, picked from a
+  gallery that shows every option in that box. Contents are always two-tone:
+  white on dark in the four corner boxes, the accent colour on dark in the two
+  middle boxes. Multi-colour styleguide assets are reduced to two tones.
 - **Layout.** *macOS lock screen* puts the banner between clock and login like
   the original wallpaper; *Centred* puts banner and pattern in the middle.
 - **Variants.** Any number of variants with thumbnails. Everything belongs to
