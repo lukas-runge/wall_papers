@@ -211,7 +211,7 @@
     if (introPlayed) return;
     introPlayed = true;
     intro = true;
-    setTimeout(() => (intro = false), 2600);
+    setTimeout(() => (intro = false), 3600);
   }
   /** Wave order of the hint: left column, text, right column. */
   const HINT_ORDER: Record<string, number> = { L1: 0, L2: 1, L3: 2, line0: 3, line1: 4, R1: 5, R2: 6, R3: 7 };
@@ -690,21 +690,82 @@
     outline: none;
   }
 
-  /* Intro: every clickable part flashes twice, as a wave from left to right. */
+  /* Intro: every clickable part lights up as a wave from left to right,
+     with a glint sweeping over it and a few sparkles around it. */
   .intro .hotspot,
   .intro .text-hotspot {
-    animation: hint 0.9s ease-in-out calc(var(--hint) * 70ms) 2;
+    --at: calc(350ms + var(--hint) * 110ms);
+    overflow: visible;
+    animation: hint 1s ease-in-out var(--at) 2 both;
   }
   @keyframes hint {
     0%,
     100% {
       border-color: transparent;
       background: transparent;
+      box-shadow: none;
+      scale: 1;
     }
-    40%,
+    30%,
     60% {
       border-color: var(--accent);
-      background: color-mix(in srgb, var(--accent) 18%, transparent);
+      background: color-mix(in srgb, var(--accent) 30%, transparent);
+      box-shadow:
+        0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent),
+        0 0 30px color-mix(in srgb, var(--accent) 80%, transparent);
+      scale: 1.1;
+    }
+  }
+  /* glint */
+  .intro .hotspot::before,
+  .intro .text-hotspot::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(110deg, transparent 30%, rgb(255 255 255 / 0.85) 48%, rgb(255 255 255 / 0.85) 52%, transparent 70%) no-repeat;
+    background-size: 300% 100%;
+    mix-blend-mode: screen;
+    opacity: 0;
+    animation: glint 0.9s ease-out calc(var(--at) + 200ms) 2;
+  }
+  @keyframes glint {
+    0% {
+      opacity: 1;
+      background-position: 100% 0;
+    }
+    100% {
+      opacity: 1;
+      background-position: 0% 0;
+    }
+  }
+  /* sparkles: one star, repeated by its text shadows */
+  .intro .hotspot::after,
+  .intro .text-hotspot::after {
+    content: "✦";
+    position: absolute;
+    top: -0.55em;
+    right: -0.45em;
+    font: 400 2.4cqw/1 sans-serif;
+    color: #fff;
+    text-shadow:
+      -3.4cqw 4.6cqw 0 var(--accent),
+      0.6cqw 5.2cqw 0 #fff,
+      -2cqw -0.4cqw 0 var(--accent);
+    pointer-events: none;
+    scale: 0;
+    animation: twinkle 0.8s ease-in-out calc(var(--at) + 150ms) 3;
+  }
+  @keyframes twinkle {
+    0%,
+    100% {
+      scale: 0;
+      rotate: 0deg;
+      opacity: 0;
+    }
+    50% {
+      scale: 1;
+      rotate: 90deg;
+      opacity: 1;
     }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -712,6 +773,12 @@
     .intro .text-hotspot {
       animation: none;
       border-color: var(--accent);
+    }
+    .intro .hotspot::before,
+    .intro .hotspot::after,
+    .intro .text-hotspot::before,
+    .intro .text-hotspot::after {
+      display: none;
     }
   }
 
