@@ -330,8 +330,8 @@
     </div>
 </header>
 
-<main class="layout">
-  <section class="stage">
+<div class="layout">
+  <main class="stage">
     <div class="frame" style="--aspect: {v.width / v.height}">
       <div class="canvas">
         <canvas bind:this={preview} aria-label="Preview of {variantLabel(v)}"></canvas>
@@ -410,7 +410,7 @@
       </div>
     </div>
 
-  </section>
+  </main>
 
   <aside class="panel">
     <fieldset>
@@ -464,7 +464,16 @@
       {#if link}<input class="link" readonly value={link} aria-label="Link" onfocus={(e) => e.currentTarget.select()} />{/if}
     </fieldset>
   </aside>
-</main>
+
+  <footer class="footer">
+    <p>
+      Design assets: <a href="https://events.ccc.de/congress/2026/infos/styleguide/">40C3 styleguide</a> by the 40C3 design team.
+      Fonts: <a href="https://sourcefoundry.org/hack/">Hack</a> (MIT / Bitstream Vera),
+      <a href="https://fonts.google.com/specimen/Jersey+10">Jersey 10</a> (OFL).
+      Unofficial, not by the CCC. <a href="https://github.com/lukas-runge/wall_papers">Source</a>
+    </p>
+  </footer>
+</div>
 
 <dialog bind:this={importDialog} class="import" onclose={() => (incoming = [])} aria-labelledby="import-title">
   <h2 id="import-title">{incoming.length === 1 ? "Shared variant" : `${incoming.length} shared variants`}</h2>
@@ -482,14 +491,6 @@
   </div>
 </dialog>
 
-<footer class="footer">
-  <p>
-    Design assets: <a href="https://events.ccc.de/congress/2026/infos/styleguide/">40C3 styleguide</a> by the 40C3 design team.
-    Fonts: <a href="https://sourcefoundry.org/hack/">Hack</a> (MIT / Bitstream Vera),
-    <a href="https://fonts.google.com/specimen/Jersey+10">Jersey 10</a> (OFL).
-    Unofficial, not by the CCC. <a href="https://github.com/lukas-runge/wall_papers">Source</a>
-  </p>
-</footer>
 
 <style>
   /* Logo and variants share the top row; on narrow screens they stack. */
@@ -498,7 +499,7 @@
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
     gap: var(--gap);
-    padding: 14px var(--gap) 0;
+    padding: var(--gap) var(--gap) 0;
   }
   @media (max-width: 900px) {
     .masthead {
@@ -532,14 +533,33 @@
   .layout {
     display: grid;
     grid-template-columns: auto minmax(280px, 330px);
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "stage panel"
+      "footer panel";
     justify-content: start;
-    gap: var(--gap);
-    padding: 14px var(--gap) var(--gap);
+    gap: 12px var(--gap);
+    padding: var(--gap);
     align-items: start;
+  }
+  .stage {
+    grid-area: stage;
+  }
+  .panel {
+    grid-area: panel;
+  }
+  .footer {
+    grid-area: footer;
   }
   @media (max-width: 900px) {
     .layout {
       grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: none;
+      grid-template-areas: "stage" "panel" "footer";
+      row-gap: var(--gap);
+    }
+    .panel {
+      margin-top: 0;
     }
     .frame {
       width: 100% !important;
@@ -555,7 +575,7 @@
   .frame {
     border: 1.5px solid var(--accent);
     padding: 6px;
-    width: min(calc(100vw - 330px - 3 * var(--gap)), calc((100svh - 140px) * var(--aspect) + 15px));
+    width: min(calc(100vw - 330px - 3 * var(--gap)), calc((100svh - var(--bar) - 3 * var(--gap) - 15px) * var(--aspect) + 15px));
   }
   .canvas {
     position: relative;
@@ -624,9 +644,6 @@
   }
 
   /* Variant cards are exactly as tall as the two-line logo next to them. */
-  .masthead {
-    --bar: calc(2 * 1.05 * clamp(20px, 2.2vw, 30px));
-  }
   .variants {
     display: flex;
     gap: 8px;
@@ -714,9 +731,12 @@
     font-size: 1.05rem;
   }
 
+  /* The legend sits on the fieldset's top border: pull the panel up by half
+     a legend so the first border lines up with the preview frame. */
   .panel {
     display: grid;
     gap: 0.9rem;
+    margin-top: -0.75rem;
   }
   fieldset {
     margin: 0;
@@ -728,6 +748,7 @@
   }
   legend {
     font-size: 1.5rem;
+    line-height: 1;
     padding: 0 0.3em;
   }
   label {
@@ -791,8 +812,10 @@
   }
 
   .footer {
-    padding: 0 var(--gap) var(--gap);
     color: var(--muted);
     font-size: 0.8rem;
+  }
+  .footer p {
+    margin: 0;
   }
 </style>

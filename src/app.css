@@ -27,6 +27,8 @@
   --muted: color-mix(in srgb, var(--white) 62%, var(--ground));
   --line: color-mix(in srgb, var(--accent) 55%, var(--ground));
   --gap: clamp(16px, 2.4vw, 32px);
+  /* height of the two-line wordmark (and of the variant cards next to it) */
+  --bar: calc(2 * 1.05 * clamp(20px, 2.2vw, 30px));
   color-scheme: dark;
 }
 
