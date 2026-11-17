@@ -557,10 +557,6 @@
       grid-template-columns: minmax(0, 1fr);
       grid-template-rows: none;
       grid-template-areas: "stage" "panel" "footer";
-      row-gap: var(--gap);
-    }
-    .panel {
-      margin-top: 0;
     }
     .frame {
       width: 100% !important;
