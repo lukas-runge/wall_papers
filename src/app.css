@@ -29,6 +29,8 @@
   --gap: clamp(16px, 2.4vw, 32px);
   /* space between the parts of the page (header, preview, boxes, credits) */
   --space: 16px;
+  /* one line of credits under the preview (0.8rem × 1.5) */
+  --credits: 1.2rem;
   /* height of the two-line wordmark (and of the variant cards next to it) */
   --bar: calc(2 * 1.05 * clamp(20px, 2.2vw, 30px));
   color-scheme: dark;
@@ -36,6 +38,11 @@
 
 * {
   box-sizing: border-box;
+}
+
+/* A scrollbar, when there is one, gets its own lane instead of narrowing the page. */
+html {
+  scrollbar-gutter: stable;
 }
 
 html,

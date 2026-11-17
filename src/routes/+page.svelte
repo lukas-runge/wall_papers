@@ -618,6 +618,9 @@
       "stage panel"
       "footer panel";
     justify-content: start;
+    /* the preview sizes itself to this box (cqw), not to the window (vw),
+       so a scrollbar does not push the settings around */
+    container-type: inline-size;
     /* --space between all parts; page margins outside */
     gap: var(--space);
     padding: var(--space) var(--gap) var(--gap);
@@ -652,7 +655,7 @@
   .frame {
     border: 1.5px solid var(--accent);
     padding: 6px;
-    width: min(calc(100vw - 330px - 2 * var(--gap) - var(--space)), calc((100svh - var(--bar) - 2 * var(--gap) - var(--space) - 15px) * var(--aspect) + 15px));
+    width: min(calc(100cqw - 330px - var(--space)), calc((100svh - var(--bar) - 2 * var(--gap) - 2 * var(--space) - var(--credits) - 15px) * var(--aspect) + 15px));
   }
   .canvas {
     position: relative;
@@ -871,6 +874,9 @@
   }
   .name {
     font-weight: 700;
+    /* room below the baseline, or the clipping cuts off the underscore */
+    padding-bottom: 0.3em;
+    margin-bottom: -0.3em;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1004,6 +1010,7 @@
   .footer {
     color: var(--muted);
     font-size: 0.8rem;
+    line-height: 1.5;
   }
   .footer p {
     margin: 0;
