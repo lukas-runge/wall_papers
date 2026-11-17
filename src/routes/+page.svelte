@@ -227,6 +227,18 @@
     s.variants.push(cloneVariant(v));
     s.active = s.variants.length - 1;
   }
+  // Removing asks first.
+  let removeDialog: HTMLDialogElement;
+  let removing = $state<number | null>(null);
+  function askRemove(i: number) {
+    removing = i;
+    removeDialog.showModal();
+  }
+  function confirmRemove() {
+    if (removing !== null) removeVariant(removing);
+    removeDialog.close();
+  }
+
   function removeVariant(i: number) {
     if (s.variants.length === 1) return;
     s.variants.splice(i, 1);
@@ -342,7 +354,7 @@
             {@render card(x)}
           </button>
           {#if s.variants.length > 1}
-            <button type="button" class="remove" onclick={() => removeVariant(i)} aria-label="Remove {variantLabel(x)}" title="Remove">×</button>
+            <button type="button" class="remove" onclick={() => askRemove(i)} aria-label="Remove {variantLabel(x)}" title="Remove">×</button>
           {/if}
         </div>
       {/each}
@@ -497,7 +509,20 @@
   </footer>
 </div>
 
-<dialog bind:this={importDialog} class="import" onclose={() => (incoming = [])} aria-labelledby="import-title">
+<dialog bind:this={removeDialog} class="dialog" onclose={() => (removing = null)} aria-labelledby="remove-title">
+  <h2 id="remove-title">Remove variant?</h2>
+  {#if removing !== null && s.variants[removing]}
+    <ul class="incoming">
+      <li class="variant">{@render card(s.variants[removing])}</li>
+    </ul>
+  {/if}
+  <div class="actions">
+    <button type="button" class="loud" onclick={confirmRemove}>Remove</button>
+    <button type="button" class="quiet" onclick={() => removeDialog.close()}>Cancel</button>
+  </div>
+</dialog>
+
+<dialog bind:this={importDialog} class="dialog" onclose={() => (incoming = [])} aria-labelledby="import-title">
   <h2 id="import-title">{incoming.length === 1 ? "Shared variant" : `${incoming.length} shared variants`}</h2>
   <ul class="incoming">
     {#each incoming as x, i (i)}
@@ -753,6 +778,15 @@
   .remove:focus-visible {
     opacity: 1;
   }
+  /* No hover on touch screens: the remove button is always there. */
+  @media (hover: none) {
+    .remove {
+      opacity: 1;
+    }
+    .variants .pick {
+      padding-right: calc(1.3rem + 8px);
+    }
+  }
   .add {
     flex: none;
     display: grid;
@@ -806,17 +840,17 @@
     color: var(--white);
   }
 
-  .import {
+  .dialog {
     max-width: min(560px, calc(100vw - 32px));
     padding: 0.4rem 1.2rem 1.2rem;
     border: 1.5px solid var(--accent);
     background: var(--ground);
     color: var(--white);
   }
-  .import::backdrop {
+  .dialog::backdrop {
     background: rgb(0 0 0 / 0.65);
   }
-  .import h2 {
+  .dialog h2 {
     margin: 0.4rem 0 0.8rem;
     font-size: 1.8rem;
     line-height: 1;
