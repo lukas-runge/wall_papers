@@ -538,8 +538,9 @@
       "stage panel"
       "footer panel";
     justify-content: start;
+    /* 12px between header, preview and credits; page margins outside */
     gap: 12px var(--gap);
-    padding: var(--gap);
+    padding: 12px var(--gap) var(--gap);
     align-items: start;
   }
   .stage {
@@ -575,7 +576,7 @@
   .frame {
     border: 1.5px solid var(--accent);
     padding: 6px;
-    width: min(calc(100vw - 330px - 3 * var(--gap)), calc((100svh - var(--bar) - 3 * var(--gap) - 15px) * var(--aspect) + 15px));
+    width: min(calc(100vw - 330px - 3 * var(--gap)), calc((100svh - var(--bar) - 2 * var(--gap) - 12px - 15px) * var(--aspect) + 15px));
   }
   .canvas {
     position: relative;
