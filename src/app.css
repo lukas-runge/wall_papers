@@ -40,7 +40,6 @@ body {
   background: var(--ground);
   color: var(--white);
   font: 400 15px/1.5 "Hack", ui-monospace, monospace;
-  transition: background 0.4s;
 }
 
 a {

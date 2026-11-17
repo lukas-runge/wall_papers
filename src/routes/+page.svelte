@@ -55,13 +55,16 @@
     editingText = false;
   });
 
-  // Page colours follow the active variant.
-  $effect(() => {
+  /**
+   * Page colours follow the active variant. They change in the same frame as
+   * the preview picture (after it has rendered), so both switch together.
+   */
+  function applyTheme(p: { ground: string; accent: string }) {
     const root = document.documentElement.style;
-    root.setProperty("--ground", info.palette.ground);
-    root.setProperty("--accent", info.palette.accent);
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", info.palette.ground);
-  });
+    root.setProperty("--ground", p.ground);
+    root.setProperty("--accent", p.accent);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", p.ground);
+  }
 
   // State lives in the URL, so a set of variants can be shared as a link.
   $effect(() => {
@@ -82,10 +85,11 @@
         preview.width = pw;
         preview.height = ph;
         preview.getContext("2d")!.drawImage(c, 0, 0);
+        applyTheme(design.palette);
       } catch (e) {
         status = (e as Error).message;
       }
-    }, 60);
+    }, 30);
     return () => clearTimeout(t);
   });
 
@@ -230,6 +234,7 @@
     });
 
   onMount(() => {
+    applyTheme(info.palette);
     const onHash = () => (s = readState(location.hash));
     addEventListener("hashchange", onHash);
     return () => removeEventListener("hashchange", onHash);

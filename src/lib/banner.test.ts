@@ -73,9 +73,13 @@ describe("colours", () => {
     expect(assetTone("Icon_Cat", "#75b44b")).toBe("ink");
     expect(assetTone("Icon_Cat", "#ebedf0")).toBe("ink");
     expect(assetTone("Adam", "#001300")).toBe("paper");
-    // Blåhaj keeps its teeth: the pink square is ink, white is paper
-    expect(assetTone("Blahaj", "#ea6f82")).toBe("ink");
-    expect(assetTone("Blahaj", "#ebedf0")).toBe("paper");
+    // Blåhaj: the pink square disappears, the shark (unfilled, white) is ink
+    expect(assetTone("Blahaj", "#ea6f82")).toBe("paper");
+    expect(assetTone("Blahaj", "#ebedf0")).toBe("ink");
+    expect(assetTone("Blahaj", "default")).toBe("ink");
+    expect(assetTone("Chaospost", "#ffbb40")).toBe("paper");
+    // unfilled shapes are dark details everywhere else
+    expect(assetTone("Icon_Smiley", "default")).toBe("paper");
     // the star has only a dark colour
     expect(assetTone("Star", "#001300")).toBe("ink");
   });
@@ -103,6 +107,17 @@ describe("two colours per box", () => {
           const ink = slot === "L2" || slot === "R2" ? palette.lines : "#e7edea";
           expect(cols, `${slot} ${a.id}`).toContain(ink);
         }
+  });
+
+  it("draws Icon 10 like the swirl diamond: solid half, outlined half", () => {
+    const m = slotContent("L1", "asset:Icon_10", pink, ASSETS);
+    expect(m).toContain(`fill="${pink.ground}" stroke="#e7edea" stroke-width="1.45"`);
+    expect(m).toMatch(/<polygon fill="#e7edea"/);
+  });
+
+  it("gives unfilled shapes their tone", () => {
+    expect(slotContent("R1", "asset:Chaospost", pink, ASSETS)).toContain('<g fill="#e7edea">');
+    expect(slotContent("R1", "asset:Icon_Smiley", pink, ASSETS)).toContain(`<g fill="${pink.ground}">`);
   });
 
   it("moves a white figure into a middle box in the accent colour", () => {

@@ -144,24 +144,40 @@ const bannerRules = () => parseClassRules(bannerParts.style);
 export const isMiddle = (slot: SlotId) => slot === "L2" || slot === "R2";
 export const inkFor = (slot: SlotId, palette: Palette) => (isMiddle(slot) ? palette.lines : BANNER_WHITE);
 
-type Tone = "ink" | "paper";
+type Tone = "ink" | "paper" | "outline";
+
+/** Stand-in for shapes without a fill: SVG draws them black. */
+export const DEFAULT_FILL = "default";
 
 /**
- * How each styleguide asset becomes two-tone. Default: dark colours are paper,
- * everything else is ink. Some assets keep their details only the other way
- * round (CI colour is ink, white is paper); the star has only a dark colour.
+ * How each styleguide asset becomes two-tone (default: dark colours and
+ * unfilled shapes are paper, everything else is ink).
+ * - `motif-ink`: the coloured background shape (square, oval) disappears into
+ *   the paper, the motif on it becomes ink.
+ * - `ci-ink`: the CI colour is ink, white is paper (keeps the face of Blob 0).
+ * - per colour: Icon 10 works like the swirl diamond of the banner (one half
+ *   solid with the symbol cut out, the other half outlined with a solid
+ *   symbol); the star has only a dark colour.
  */
-const ASSET_TONES: Record<string, "ci-ink" | Record<string, Tone>> = {
-  Blahaj: "ci-ink",
+const ASSET_TONES: Record<string, "motif-ink" | "ci-ink" | Record<string, Tone>> = {
+  Blahaj: "motif-ink",
+  Luckycat: "motif-ink",
+  Chaospost: "motif-ink",
+  Fairydust: "motif-ink",
   Icon_Blob0: "ci-ink",
-  Luckycat: "ci-ink",
+  Icon_10: { "#ebedf0": "ink", "#75b44b": "outline", "#001300": "paper" },
   Star: { "#001300": "ink" },
 };
 
 export function assetTone(assetId: string, hex: string): Tone {
-  const h = expandHex(hex.toLowerCase());
   const rule = ASSET_TONES[assetId];
-  if (rule && rule !== "ci-ink" && rule[h]) return rule[h];
+  const h = hex === DEFAULT_FILL ? hex : expandHex(hex.toLowerCase());
+  if (rule && typeof rule === "object" && rule[h]) return rule[h];
+  if (rule === "motif-ink") {
+    if (h === DEFAULT_FILL) return "ink";
+    return CI_HEX.has(h) || relativeLuminance(h) < 0.02 ? "paper" : "ink";
+  }
+  if (h === DEFAULT_FILL) return "paper";
   if (relativeLuminance(h) < 0.02) return "paper";
   if (rule === "ci-ink") return CI_HEX.has(h) ? "ink" : "paper";
   return "ink";
@@ -176,16 +192,25 @@ const r2 = (v: number) => Math.round(v * 100) / 100;
 /** Inline a styleguide asset into a box: classes inlined, ids prefixed, two-tone, fitted into the frame. */
 export function embedAsset(svg: string, prefix: string, box: Box, tones: { ink: string; paper: string }, assetId = ""): string {
   const [, , vw, vh] = viewBox(svg);
-  const inner = flattenSvg(svg, (h) => tones[assetTone(assetId, h)])
+  // "outline" shapes: paper inside, an ink line around (marked with a stand-in colour first).
+  const OUTLINE = "#fe00fe";
+  const tone = (h: string) => {
+    const t = assetTone(assetId, h);
+    return t === "outline" ? OUTLINE : tones[t];
+  };
+  const inner = flattenSvg(svg, tone)
+    .replaceAll(`fill="${OUTLINE}"`, `fill="${tones.paper}" stroke="${tones.ink}" stroke-width="1.45" stroke-linejoin="miter"`)
     .replace(/\sid="([^"]*)"/g, ` id="${prefix}$1"`)
     .replace(/url\(#([^)]*)\)/g, `url(#${prefix}$1)`);
+  // Shapes without a fill would be black: give them their tone explicitly.
+  const base = tone(DEFAULT_FILL);
   // Fit into the inside of the frame with some air around it.
   const [x0, y0, x1, y1] = box;
   const pad = 1.45 + 4;
   const w = x1 - x0 - 2 * pad, h = y1 - y0 - 2 * pad;
   const s = Math.min(w / vw, h / vh);
   const x = x0 + pad + (w - vw * s) / 2, y = y0 + pad + (h - vh * s) / 2;
-  return `<svg x="${r(x)}" y="${r(y)}" width="${r(vw * s)}" height="${r(vh * s)}" viewBox="${viewBox(svg).join(" ")}" overflow="visible">${inner}</svg>`;
+  return `<svg x="${r(x)}" y="${r(y)}" width="${r(vw * s)}" height="${r(vh * s)}" viewBox="${viewBox(svg).join(" ")}" overflow="visible"><g fill="${base}">${inner}</g></svg>`;
 }
 
 /** The X of the middle box, generated for any box with the insets of the original. */
