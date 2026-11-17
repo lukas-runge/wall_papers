@@ -506,6 +506,10 @@
       grid-template-columns: minmax(0, 1fr);
       gap: var(--space);
     }
+    /* the space below the letters (descenders) already counts as gap */
+    .masthead .wordmark {
+      margin-bottom: -0.22em;
+    }
   }
   .wordmark {
     margin: 0;
@@ -646,6 +650,15 @@
     gap: 8px;
     overflow-x: auto;
     min-width: 0;
+  }
+  /* Touch screens swipe; their scrollbar would lie over the cards. */
+  @media (pointer: coarse) {
+    .variants {
+      scrollbar-width: none;
+    }
+    .variants::-webkit-scrollbar {
+      display: none;
+    }
   }
   .variant {
     position: relative;
