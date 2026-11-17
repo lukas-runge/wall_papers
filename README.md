@@ -37,7 +37,7 @@ rendered on your machine.
   otherwise a ZIP with the PNGs, SVGs and one `.figcraft` for the FigCraft
   variants.
 
-Variants are kept in the browser (local storage). Pick **Share** as output to get a link to the current variant or to all of them; opening such a link offers to add the shared variants or to replace your own (variants you already have are just selected).
+Variants are kept in the browser (local storage). Under **Share** you get a link to the current variant or to all of them; opening such a link offers to add the shared variants or to replace your own (variants you already have are just selected).
 
 ## How it works
 

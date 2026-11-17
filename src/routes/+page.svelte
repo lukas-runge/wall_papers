@@ -83,25 +83,23 @@
   // Variants stay in the browser between visits.
   $effect(() => saveState(storage(), s));
 
-  // Sharing: a link to the active variant or to all of them, instead of a file.
-  let sharing = $state(false);
+  // Sharing: a link to the active variant or to all of them.
   let link = $state("");
-  const OUTPUTS: { id: Format | "share"; label: string }[] = [...FORMATS, { id: "share", label: "Share" }];
+  let shareStatus = $state("");
 
   // A copied link stops matching once something changes.
   $effect(() => {
     JSON.stringify(s.variants);
-    link = "";
-    if (sharing) status = "";
+    link = shareStatus = "";
   });
 
   async function share(list: Variant[]) {
     link = `${location.origin}${location.pathname}#${shareHash($state.snapshot(list))}`;
     try {
       await navigator.clipboard.writeText(link);
-      status = list.length === 1 ? "Link copied" : `Link to ${list.length} variants copied`;
+      shareStatus = list.length === 1 ? "Link copied" : `Link to ${list.length} variants copied`;
     } catch {
-      status = "Copy the link:";
+      shareStatus = "Copy the link:";
     }
   }
 
@@ -448,30 +446,22 @@
           <label>Height <input type="number" min="64" max="16384" value={v.height} onchange={(e) => update({ height: clampSize(e.currentTarget.value) })} /></label>
         </div>
       {/if}
-      <Segmented
-        label="Format"
-        options={OUTPUTS}
-        value={sharing ? "share" : v.format}
-        onchange={(o) => {
-          sharing = o === "share";
-          status = link = "";
-          if (o !== "share") update({ format: o });
-        }}
-      />
+      <Segmented label="Format" options={FORMATS} value={v.format} onchange={(format) => update({ format })} />
     </fieldset>
 
     <fieldset>
-      {#if sharing}
-        <legend>Share</legend>
-        <button type="button" class="loud" onclick={() => share([v])}>Share variant</button>
-        <button type="button" class="quiet" onclick={() => share(s.variants)}>Share all variants</button>
-      {:else}
-        <legend>Download</legend>
-        <button type="button" class="loud" disabled={busy} onclick={downloadVariant}>Download variant</button>
-        <button type="button" class="quiet" disabled={busy} onclick={downloadAll}>Download all variants</button>
-      {/if}
+      <legend>Download</legend>
+      <button type="button" class="loud" disabled={busy} onclick={downloadVariant}>Download variant</button>
+      <button type="button" class="quiet" disabled={busy} onclick={downloadAll}>Download all variants</button>
       {#if status}<p class="status" role="status">{status}</p>{/if}
-      {#if sharing && link}<input class="link" readonly value={link} aria-label="Link" onfocus={(e) => e.currentTarget.select()} />{/if}
+    </fieldset>
+
+    <fieldset>
+      <legend>Share</legend>
+      <button type="button" class="quiet" onclick={() => share([v])}>Share variant</button>
+      <button type="button" class="quiet" onclick={() => share(s.variants)}>Share all variants</button>
+      {#if shareStatus}<p class="status" role="status">{shareStatus}</p>{/if}
+      {#if link}<input class="link" readonly value={link} aria-label="Link" onfocus={(e) => e.currentTarget.select()} />{/if}
     </fieldset>
   </aside>
 </main>
