@@ -1,16 +1,16 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { strToU8, zipSync } from "fflate";
-  import BoxPicker from "#components/BoxPicker";
   import ColourPicker from "#components/ColourPicker";
   import Segmented from "#components/Segmented";
   import BoxGallery, { SLOT_NAMES } from "#components/BoxGallery";
-  import { SLOTS, creatureCatalogue, type SlotId } from "#lib/banner";
+  import { DEFAULT_SLOTS, SLOTS, creatureCatalogue, type SlotId } from "#lib/banner";
   import { ASSETS } from "#lib/assets";
-  import { CI_MODES } from "#lib/colors";
+  import { BANNER_WHITE, CI_MODES } from "#lib/colors";
+  import { HACK_ADVANCE_EM } from "#lib/layout";
   import { canvasToBlob, loadSources, renderWallpaper, svgDocument } from "#lib/render";
   import { figcraftFile } from "#lib/figcraft";
-  import { boxRects, wallpaperSvg } from "#lib/wallpaper";
+  import { HACK_ASCENT, HACK_LINE, boxRects, wallpaperSvg, wordmarkGeometry } from "#lib/wallpaper";
   import type { Placement } from "#lib/layout";
   import {
     FORMATS,
@@ -41,10 +41,18 @@
   let busy = $state(false);
 
   const update = (patch: Partial<Variant>) => (s.variants[s.active] = { ...v, ...patch });
-  // The custom size fields belong to the variant being edited.
+
+  // Editing in the preview: one box gallery or the text at a time.
+  let openBox = $state<SlotId | null>(null);
+  let editingText = $state(false);
+  let lineInputs: HTMLInputElement[] = $state([]);
+
+  // Switching variants closes editors and the custom size fields.
   $effect(() => {
     s.active;
     customSize = false;
+    openBox = null;
+    editingText = false;
   });
 
   // Page colours follow the active variant.
@@ -61,10 +69,10 @@
     if (location.hash.slice(1) !== hash) history.replaceState(null, "", hash ? `#${hash}` : location.pathname);
   });
 
-  // Preview of the active variant.
+  // Preview of the active variant (without its text while the text is being edited in place).
   let previewGen = 0;
   $effect(() => {
-    const design = designOf(v), w = v.width, h = v.height;
+    const design = { ...designOf(v), hideText: editingText }, w = v.width, h = v.height;
     const g = ++previewGen;
     const t = setTimeout(async () => {
       const pw = Math.min(1920, w), ph = Math.round((pw * h) / w);
@@ -77,7 +85,7 @@
       } catch (e) {
         status = (e as Error).message;
       }
-    }, 80);
+    }, 60);
     return () => clearTimeout(t);
   });
 
@@ -95,6 +103,43 @@
     }, 300);
     return () => clearTimeout(t);
   });
+
+  // Geometry of the clickable parts of the preview, as fractions of the wallpaper.
+  const boxes = $derived(boxRects({ lines: [v.line1, v.line2], placement: v.placement }, v.width, v.height));
+  const words = $derived(wordmarkGeometry({ lines: [v.line1, v.line2], placement: v.placement }, v.width, v.height));
+  const pct = (f: number) => `${(f * 100).toFixed(4)}%`;
+  /** Length in container-query units: scales with the preview width. */
+  const cq = (px: number) => `${((px / v.width) * 100).toFixed(4)}cqw`;
+
+  const catalogue = creatureCatalogue(ASSETS);
+  const creatureLabel = (id: string) => catalogue.find((c) => c.id === id)?.label ?? id;
+  const boxesAreOriginal = $derived(SLOTS.every((slot) => v.slots[slot] === DEFAULT_SLOTS[slot]));
+
+  function toggleBox(slot: SlotId) {
+    editingText = false;
+    openBox = openBox === slot ? null : slot;
+  }
+
+  async function editText(line: 0 | 1) {
+    openBox = null;
+    editingText = true;
+    await tick();
+    lineInputs[line]?.focus();
+    lineInputs[line]?.select();
+  }
+
+  /** Clicks outside a gallery, a box or the text inputs close what is open. */
+  function onWindowClick(e: MouseEvent) {
+    const t = e.target as Element;
+    if (openBox && !t.closest(".popover, .hotspot")) openBox = null;
+    if (editingText && !t.closest(".line-input, .text-hotspot")) editingText = false;
+  }
+  function onKey(e: KeyboardEvent) {
+    if (e.key === "Escape") {
+      openBox = null;
+      editingText = false;
+    }
+  }
 
   function addVariant() {
     s.variants.push(cloneVariant(v));
@@ -137,6 +182,7 @@
   }
 
   const mime: Record<Format, string> = { png: "image/png", svg: "image/svg+xml", figcraft: "application/zip" };
+  const blob = (data: Uint8Array, type: string) => new Blob([data as Uint8Array<ArrayBuffer>], { type });
 
   async function run(task: () => Promise<void>) {
     busy = true;
@@ -149,8 +195,6 @@
       busy = false;
     }
   }
-
-  const blob = (data: Uint8Array, type: string) => new Blob([data as Uint8Array<ArrayBuffer>], { type });
 
   const downloadVariant = () =>
     run(async () => {
@@ -193,28 +237,13 @@
 
   const clampSize = (val: string) => Math.min(16384, Math.max(64, Math.round(Number(val) || 0)));
 
-  // Boxes in the preview: click to change their contents.
-  const catalogue = creatureCatalogue(ASSETS);
-  const creatureLabel = (id: string) => catalogue.find((c) => c.id === id)?.label ?? id;
-  const hotspots = $derived(boxRects({ lines: [v.line1, v.line2], placement: v.placement }, v.width, v.height));
-  let openBox = $state<SlotId | null>(null);
-  let stage: HTMLElement;
-  const pct = (f: number) => `${(f * 100).toFixed(3)}%`;
-  function closeOnOutside(e: MouseEvent) {
-    if (openBox && stage && !stage.contains(e.target as Node)) openBox = null;
-  }
-  $effect(() => {
-    s.active;
-    openBox = null;
-  });
-
   const LAYOUTS: { id: Placement; label: string }[] = [
     { id: "centered", label: "Centred" },
     { id: "lockscreen", label: "macOS lock screen" },
   ];
 </script>
 
-<svelte:window onclick={closeOnOutside} onkeydown={(e) => e.key === "Escape" && (openBox = null)} />
+<svelte:window onclick={onWindowClick} onkeydown={onKey} />
 
 <header class="masthead">
   <h1 class="wordmark" aria-label="WALL_PAPERS"><span>WALL<span class="cursor">_</span></span><span>PAPERS</span></h1>
@@ -222,11 +251,12 @@
 
 <main class="layout">
   <section class="stage">
-    <div class="frame">
-      <div class="canvas" bind:this={stage}>
+    <div class="frame" style="--aspect: {v.width / v.height}">
+      <div class="canvas">
         <canvas bind:this={preview} aria-label="Preview of {variantLabel(v)}"></canvas>
+
         {#each SLOTS as slot (slot)}
-          {@const r = hotspots[slot]}
+          {@const r = boxes[slot]}
           <button
             type="button"
             class="hotspot"
@@ -235,15 +265,54 @@
             aria-label="Box {SLOT_NAMES[slot]}: {creatureLabel(v.slots[slot])}"
             aria-expanded={openBox === slot}
             title={creatureLabel(v.slots[slot])}
-            onclick={() => (openBox = openBox === slot ? null : slot)}
+            onclick={() => toggleBox(slot)}
           ></button>
         {/each}
+
+        {#if editingText}
+          {#each words.lines as l, li (li)}
+            <input
+              bind:this={lineInputs[li]}
+              class="line-input"
+              aria-label="Line {li + 1}"
+              maxlength="14"
+              spellcheck="false"
+              autocomplete="off"
+              value={li === 0 ? v.line1 : v.line2}
+              style="left: {pct(l.x / v.width)}; top: {pct((l.baseline - HACK_ASCENT * words.fontSize) / v.height)};
+                font-size: {cq(words.fontSize)}; letter-spacing: {cq(words.spacing)};
+                width: {cq((Math.max([...(li === 0 ? v.line1 : v.line2)].length, 1) + 1) * (HACK_ADVANCE_EM * words.fontSize + words.spacing))};
+                -webkit-text-stroke: {cq(words.stroke)} {BANNER_WHITE}; color: {BANNER_WHITE}; --line: {HACK_LINE}"
+              oninput={(e) => update(li === 0 ? { line1: e.currentTarget.value.toUpperCase() } : { line2: e.currentTarget.value.toUpperCase() })}
+              onkeydown={(e) => {
+                if (e.key === "Enter" || (e.key === "ArrowDown" && li === 0) || (e.key === "ArrowUp" && li === 1)) {
+                  e.preventDefault();
+                  if (e.key === "Enter" && li === 1) editingText = false;
+                  else lineInputs[li === 0 ? 1 : 0]?.focus();
+                }
+              }}
+            />
+          {/each}
+        {:else}
+          {#each words.lines as l, li (li)}
+            <button
+              type="button"
+              class="text-hotspot"
+              style="left: {pct(words.rect.x / v.width)}; top: {pct((l.baseline - HACK_ASCENT * words.fontSize) / v.height)};
+                width: {pct(words.rect.w / v.width)}; height: {pct((HACK_LINE * words.fontSize) / v.height)}"
+              aria-label="Edit line {li + 1}: {li === 0 ? v.line1 : v.line2}"
+              title="Edit text"
+              onclick={() => editText(li as 0 | 1)}
+            ></button>
+          {/each}
+        {/if}
+
         {#if openBox}
           {@const slot = openBox}
-          {@const r = hotspots[slot]}
+          {@const r = boxes[slot]}
           <div
             class="popover"
-            style={slot.startsWith("L") ? `left: ${pct(r.x + r.w + 0.012)}; top: ${pct(Math.min(r.y, 0.45))}` : `right: ${pct(1 - r.x + 0.012)}; top: ${pct(Math.min(r.y, 0.45))}`}
+            style={slot.startsWith("L") ? `left: ${pct(r.x + r.w + 0.012)}; top: ${pct(Math.min(r.y, 0.4))}` : `right: ${pct(1 - r.x + 0.012)}; top: ${pct(Math.min(r.y, 0.4))}`}
           >
             <BoxGallery
               {slot}
@@ -254,12 +323,12 @@
                 openBox = null;
               }}
             />
+            <button type="button" class="quiet small reset" disabled={boxesAreOriginal} onclick={() => update({ slots: { ...DEFAULT_SLOTS } })}>Reset all boxes</button>
           </div>
         {/if}
       </div>
     </div>
 
-    <h2>Variants</h2>
     <div class="variants">
       {#each s.variants as x, i (i)}
         <div class="variant" class:on={i === s.active}>
@@ -282,19 +351,8 @@
 
   <aside class="panel">
     <fieldset>
-      <legend>Text</legend>
-      <label>Line 1 <input value={v.line1} oninput={(e) => update({ line1: e.currentTarget.value.toUpperCase() })} maxlength="14" spellcheck="false" /></label>
-      <label>Line 2 <input value={v.line2} oninput={(e) => update({ line2: e.currentTarget.value.toUpperCase() })} maxlength="14" spellcheck="false" /></label>
-    </fieldset>
-
-    <fieldset>
       <legend>Colour</legend>
       <ColourPicker value={v.colour} onchange={(colour) => update({ colour })} />
-    </fieldset>
-
-    <fieldset>
-      <legend>Boxes</legend>
-      <BoxPicker slots={v.slots} palette={info.palette} onchange={(slots) => update({ slots })} />
     </fieldset>
 
     <fieldset>
@@ -304,22 +362,21 @@
 
     <fieldset>
       <legend>Output</legend>
-      <label>Size
-        <select
-          value={customSize || !isPreset ? "custom" : sizeKey}
-          onchange={(e) => {
-            const val = e.currentTarget.value;
-            customSize = val === "custom";
-            if (!customSize) {
-              const [width, height] = val.split("x").map(Number);
-              update({ width, height });
-            }
-          }}
-        >
-          {#each SIZES as [w, h] (`${w}x${h}`)}<option value="{w}x{h}">{w} × {h}</option>{/each}
-          <option value="custom">Custom</option>
-        </select>
-      </label>
+      <select
+        aria-label="Size"
+        value={customSize || !isPreset ? "custom" : sizeKey}
+        onchange={(e) => {
+          const val = e.currentTarget.value;
+          customSize = val === "custom";
+          if (!customSize) {
+            const [width, height] = val.split("x").map(Number);
+            update({ width, height });
+          }
+        }}
+      >
+        {#each SIZES as [w, h] (`${w}x${h}`)}<option value="{w}x{h}">{w} × {h}</option>{/each}
+        <option value="custom">Custom size</option>
+      </select>
       {#if customSize || !isPreset}
         <div class="custom-size">
           <label>Width <input type="number" min="64" max="16384" value={v.width} onchange={(e) => update({ width: clampSize(e.currentTarget.value) })} /></label>
@@ -349,13 +406,13 @@
 
 <style>
   .masthead {
-    padding: var(--gap) var(--gap) 0;
+    padding: 14px var(--gap) 0;
   }
   .wordmark {
     margin: 0;
     display: grid;
     width: max-content;
-    font: 700 clamp(28px, 4vw, 44px) / 1.05 "Hack", monospace;
+    font: 700 clamp(20px, 2.2vw, 30px) / 1.05 "Hack", monospace;
     color: var(--white);
     letter-spacing: 0.04em;
   }
@@ -376,64 +433,105 @@
 
   .layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 330px);
     gap: var(--gap);
-    padding: var(--gap);
+    padding: 14px var(--gap) var(--gap);
     align-items: start;
   }
-  @media (max-width: 960px) {
+  @media (max-width: 900px) {
     .layout {
       grid-template-columns: minmax(0, 1fr);
     }
   }
 
-  .canvas {
-    position: relative;
+  .stage {
+    display: grid;
+    gap: 14px;
+    min-width: 0;
   }
-  .hotspot {
-    position: absolute;
-    padding: 0;
-    border: 2px solid transparent;
-    background: transparent;
-    cursor: pointer;
-    transition:
-      border-color 0.15s,
-      background 0.15s;
-  }
-  .hotspot:hover,
-  .hotspot:focus-visible,
-  .hotspot.open {
-    border-color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
-    outline: none;
-  }
-  .popover {
-    position: absolute;
-    z-index: 2;
-    width: min(360px, 60%);
-    box-shadow: 0 12px 40px rgb(0 0 0 / 0.55);
-  }
+  /* Preview as large as possible while preview and variants fit the window. */
   .frame {
     border: 1.5px solid var(--accent);
     padding: 6px;
+    width: min(100%, calc((100svh - 290px) * var(--aspect) + 15px));
+    margin-inline: auto;
+  }
+  .canvas {
+    position: relative;
+    container-type: inline-size;
   }
   canvas {
     display: block;
     width: 100%;
     height: auto;
   }
-  h2 {
-    font-size: 1.6rem;
-    margin: 1rem 0 0.5rem;
+
+  .hotspot,
+  .text-hotspot {
+    position: absolute;
+    padding: 0;
+    border: 2px solid transparent;
+    background: transparent;
+    transition:
+      border-color 0.15s,
+      background 0.15s;
+  }
+  .hotspot {
+    cursor: pointer;
+  }
+  .text-hotspot {
+    cursor: text;
+  }
+  .hotspot:hover,
+  .hotspot:focus-visible,
+  .hotspot.open,
+  .text-hotspot:hover,
+  .text-hotspot:focus-visible {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    outline: none;
+  }
+
+  .line-input {
+    position: absolute;
+    box-sizing: content-box;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    border-bottom: 2px dashed var(--accent);
+    border-radius: 0;
+    background: transparent;
+    font-family: "Hack", monospace;
+    font-weight: 700;
+    line-height: calc(var(--line) * 1em);
+    height: calc(var(--line) * 1em);
+    text-transform: uppercase;
+    caret-color: var(--accent);
+    outline: none;
+  }
+
+  .popover {
+    position: absolute;
+    z-index: 2;
+    width: min(360px, 60%);
+    display: grid;
+    box-shadow: 0 12px 40px rgb(0 0 0 / 0.55);
+    background: var(--ground);
+  }
+  .popover .reset {
+    border-top: 0;
   }
 
   .variants {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 12px;
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 4px;
   }
   .variant {
     position: relative;
+    flex: none;
+    width: 160px;
     border: 1.5px solid var(--line);
   }
   .variant.on {
@@ -489,25 +587,27 @@
     opacity: 1;
   }
   .add {
+    flex: none;
     display: grid;
     gap: 8px;
     align-content: center;
+    width: 150px;
   }
 
   .panel {
     display: grid;
-    gap: 1rem;
+    gap: 0.9rem;
   }
   fieldset {
     margin: 0;
     border: 1.5px solid var(--line);
-    padding: 0.3rem 1rem 1rem;
+    padding: 0.2rem 0.9rem 0.9rem;
     display: grid;
-    gap: 0.7rem;
+    gap: 0.6rem;
     min-width: 0;
   }
   legend {
-    font-size: 1.6rem;
+    font-size: 1.5rem;
     padding: 0 0.3em;
   }
   label {
@@ -515,13 +615,8 @@
     gap: 0.25rem;
     color: var(--muted);
   }
-  input:not([type="color"]) {
+  input[type="number"] {
     color: var(--white);
-  }
-  fieldset:first-of-type input {
-    font-weight: 700;
-    font-size: 1.1rem;
-    letter-spacing: 0.05em;
   }
   .custom-size {
     display: grid;

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { bannerFrame, boxRects } from "./wallpaper";
+import { bannerFrame, boxRects, wallpaperSvg, wordmarkGeometry } from "./wallpaper";
+import { CI_MODES } from "./colors";
+import { DEFAULT_SLOTS } from "./banner";
+import { LOGO_SVG, PATTERNS } from "./assets";
 
 describe("box hotspots", () => {
   it("cover the frames of the original banner", () => {
@@ -22,5 +25,23 @@ describe("box hotspots", () => {
     const l = boxRects({ lines: ["MODEL_", "CITIZENS"], placement: "lockscreen" }, 1920, 1080);
     expect(l.L1.y).toBeGreaterThan(c.L1.y);
     expect(bannerFrame(1920, 1080, "centered").y).toBeCloseTo((1080 - 0.617 * 1080) / 2);
+  });
+});
+
+describe("wordmark geometry", () => {
+  it("puts the first line where the renderer draws it", () => {
+    const g = wordmarkGeometry({ lines: ["MODEL_", "CITIZENS"], placement: "lockscreen" }, 7680, 4320);
+    expect(g.lines[0].x).toBeCloseTo(1101.86 + 324.715 * 8.077, 0);
+    expect(g.lines[1].baseline - g.lines[0].baseline).toBeCloseTo(42.35 * 8.077, 0);
+    expect(g.fontSize).toBeCloseTo(274.12, 1);
+    expect(g.rect.w).toBeGreaterThan(8 * 165);
+  });
+
+  it("can leave the text out but keeps the layout", () => {
+    const d = { lines: ["SELF_", "HOSTED"] as [string, string], palette: CI_MODES[0], slots: DEFAULT_SLOTS, placement: "centered" as const };
+    const src = { patterns: PATTERNS, logo: LOGO_SVG, assets: [] };
+    const hidden = wallpaperSvg({ ...d, hideText: true }, 640, 360, src);
+    expect(hidden).not.toContain("HOSTED</text>");
+    expect(hidden.match(/data-name="Left column" transform="[^"]+"/)?.[0]).toBe(wallpaperSvg(d, 640, 360, src).match(/data-name="Left column" transform="[^"]+"/)?.[0]);
   });
 });

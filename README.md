@@ -13,6 +13,8 @@ rendered on your machine.
 
 ## Features
 
+- **Edit in the preview.** Click the text to type over it in place, click a
+  box to pick its contents. Colour, layout and output sit next to it.
 - **Text.** Two lines in Hack Bold next to the 40C3 cube, e.g. `SELF_ / HOSTED`
   or `ESC_ / REALITY`. Logo and text stay centred and the box columns keep the
   original gap to the text. Looks best when line 2 is longer than line 1.
@@ -22,8 +24,7 @@ rendered on your machine.
   accent. Green keeps the original values exactly.
 - **Boxes.** Each of the six boxes takes one of the banner's line drawings, a
   citizen or an icon from the styleguide (recoloured to the palette), or stays
-  empty. Click a box in the preview (or in the mini banner next to it) and
-  pick from a gallery that shows every option in that box.
+  empty, picked from a gallery that shows every option in that box.
 - **Layout.** *macOS lock screen* puts the banner between clock and login like
   the original wallpaper; *Centred* puts banner and pattern in the middle.
 - **Variants.** Any number of variants with thumbnails. Everything belongs to

@@ -19,6 +19,8 @@ export interface Design {
   palette: Palette;
   slots: Slots;
   placement: Placement;
+  /** Leave the wordmark text out (the editor draws live inputs there); the layout still follows the text. */
+  hideText?: boolean;
 }
 
 export interface Sources {
@@ -74,6 +76,35 @@ export function boxRects(d: Pick<Design, "lines" | "placement">, width: number, 
   return out;
 }
 
+/** Hack Bold metrics (em): ascent and line box with automatic line height. */
+export const HACK_ASCENT = 0.9295;
+export const HACK_LINE = 1.1667;
+
+/**
+ * Where the two wordmark lines sit in the wallpaper (pixels), for editing the
+ * text in place: pen position and baseline of each line, font size, spacing,
+ * stroke, and the box around the whole text.
+ */
+export function wordmarkGeometry(d: Pick<Design, "lines" | "placement">, width: number, height: number) {
+  const b = bannerFrame(width, height, d.placement);
+  const layout = layoutWordmark(d.lines);
+  const fontSize = TEXT.fontSize * b.s;
+  const lines = [0, 1].map((li) => ({
+    x: b.x + (TEXT.origins[li] + layout.shift) * b.s,
+    baseline: b.y + TEXT.baselines[li] * b.s,
+  }));
+  const right = Math.max(...lines.map((l) => l.x), b.x + (TEXT.origins[0] + layout.shift + Math.max(layout.width, 0)) * b.s);
+  const top = lines[0].baseline - HACK_ASCENT * fontSize;
+  const bottom = lines[1].baseline + (HACK_LINE - HACK_ASCENT) * fontSize;
+  return {
+    lines,
+    fontSize,
+    spacing: TEXT.spacing * b.s,
+    stroke: TEXT.stroke * b.s,
+    rect: { x: lines[0].x, y: top, w: Math.max(right - lines[0].x, fontSize * 3), h: bottom - top },
+  };
+}
+
 export function wallpaperSvg(d: Design, width: number, height: number, src: Sources, id = "w"): string {
   const W = width, H = height, p = d.palette;
   const place = PLACEMENTS[d.placement];
@@ -124,7 +155,7 @@ export function wallpaperSvg(d: Design, width: number, height: number, src: Sour
 
   const banner = bannerMarkup({ palette: p, slots: d.slots, assets: src.assets, logo: src.logo, shift: layout.shift });
 
-  const text = d.lines
+  const text = (d.hideText ? ["", ""] : d.lines)
     .map((line, li) => {
       const glyphs = layout.glyphs.filter((g) => g.y === TEXT.baselines[li]);
       if (!glyphs.length) return "";
