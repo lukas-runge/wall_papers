@@ -253,8 +253,11 @@
         <div class="variant" class:on={i === s.active}>
           <button type="button" class="pick" onclick={() => (s.active = i)} aria-label="Edit {variantLabel(x)}" aria-pressed={i === s.active}>
             {#if thumbs[thumbKey(x)]}<img src={thumbs[thumbKey(x)]} alt="" />{:else}<span class="placeholder"></span>{/if}
-            <span class="name">{variantLabel(x)}</span>
-            <span class="meta">{variantMeta(x)}</span>
+            <span class="text">
+              <span class="name">{x.line1} {x.line2}</span>
+              <span class="meta">{colourInfo(x.colour).name}</span>
+              <span class="meta">{variantMeta(x)}</span>
+            </span>
           </button>
           {#if s.variants.length > 1}
             <button type="button" class="remove" onclick={() => removeVariant(i)} aria-label="Remove {variantLabel(x)}" title="Remove">×</button>
@@ -468,7 +471,7 @@
   .frame {
     border: 1.5px solid var(--accent);
     padding: 6px;
-    width: min(calc(100vw - 330px - 3 * var(--gap)), calc((100svh - 230px) * var(--aspect) + 15px));
+    width: min(calc(100vw - 330px - 3 * var(--gap)), calc((100svh - 140px) * var(--aspect) + 15px));
   }
   .canvas {
     position: relative;
@@ -536,30 +539,33 @@
     border-top: 0;
   }
 
+  /* Variant cards are exactly as tall as the two-line logo next to them. */
+  .masthead {
+    --bar: calc(2 * 1.05 * clamp(20px, 2.2vw, 30px));
+  }
   .variants {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     overflow-x: auto;
-    padding-bottom: 4px;
+    min-width: 0;
   }
   .variant {
     position: relative;
     flex: none;
-    width: 150px;
+    height: var(--bar);
     border: 1.5px solid var(--line);
   }
   .variant.on {
     border-color: var(--accent);
   }
   .pick {
-    display: grid;
-    gap: 4px;
-    width: 100%;
-    padding: 4px;
+    display: flex;
+    gap: 8px;
+    height: 100%;
+    padding: 3px 10px 3px 3px;
     border: 0;
     background: none;
     color: var(--muted);
-    font: 400 0.8rem/1.3 "Hack", monospace;
     text-align: left;
   }
   .variant.on .pick {
@@ -568,28 +574,39 @@
   .pick img,
   .placeholder {
     display: block;
-    width: 100%;
+    height: 100%;
     aspect-ratio: 16 / 9;
     object-fit: contain;
     background: color-mix(in srgb, var(--white) 6%, var(--ground));
   }
-  .meta {
-    font-size: 0.7rem;
-    color: var(--muted);
+  .text {
+    display: grid;
+    align-content: center;
+    gap: 1px;
+    max-width: 150px;
+    font: 400 0.7rem/1.25 "Hack", monospace;
   }
   .name {
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .meta {
+    font-size: 0.65rem;
+    color: var(--muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .remove {
     position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 1.8rem;
-    height: 1.8rem;
+    top: 3px;
+    right: 3px;
+    width: 1.3rem;
+    height: 1.3rem;
     padding: 0;
-    font: 700 1.1rem/1 "Hack", monospace;
+    font: 700 0.9rem/1 "Hack", monospace;
     background: var(--ground);
     color: var(--white);
     border-color: var(--line);
@@ -603,10 +620,12 @@
   .add {
     flex: none;
     display: grid;
-    width: 120px;
+    height: var(--bar);
   }
   .add button {
     height: 100%;
+    padding-inline: 1.2em;
+    font-size: 1.05rem;
   }
 
   .panel {
