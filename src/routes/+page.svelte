@@ -10,7 +10,7 @@
   import { HACK_ADVANCE_EM } from "#lib/layout";
   import { canvasToBlob, loadSources, renderWallpaper, svgDocument } from "#lib/render";
   import { figcraftFile } from "#lib/figcraft";
-  import { HACK_ASCENT, HACK_LINE, boxRects, wallpaperSvg, wordmarkGeometry } from "#lib/wallpaper";
+  import { HACK_ASCENT, HACK_LINE, bannerFrame, boxRects, wallpaperSvg, wordmarkGeometry } from "#lib/wallpaper";
   import type { Placement } from "#lib/layout";
   import {
     FORMATS,
@@ -142,6 +142,7 @@
         preview.height = ph;
         preview.getContext("2d")!.drawImage(c, 0, 0);
         applyTheme(design.palette);
+        startIntro();
       } catch (e) {
         status = (e as Error).message;
       }
@@ -157,12 +158,27 @@
     const t = setTimeout(async () => {
       for (const x of todo) {
         if (thumbs[x.key]) continue;
-        const c = await renderWallpaper(x.design, 400, Math.round((400 * x.h) / x.w));
-        thumbs[x.key] = URL.createObjectURL(await canvasToBlob(c));
+        thumbs[x.key] = URL.createObjectURL(await canvasToBlob(await thumbnail(x.design, x.w, x.h)));
       }
     }, 300);
     return () => clearTimeout(t);
   });
+
+  /** A 16:9 picture around the banner, so it shows larger on the small variant cards. */
+  async function thumbnail(design: ReturnType<typeof designOf>, w: number, h: number) {
+    const W = 640, H = Math.round((W * h) / w);
+    const full = await renderWallpaper(design, W, H);
+    const b = bannerFrame(W, H, design.placement);
+    let ch = Math.min(H, b.h * 1.3), cw = (ch * 16) / 9;
+    if (cw > W) [cw, ch] = [W, (W * 9) / 16];
+    const cx = Math.min(Math.max(W / 2 - cw / 2, 0), W - cw), cy = Math.min(Math.max(b.y + b.h / 2 - ch / 2, 0), H - ch);
+    const out = document.createElement("canvas");
+    out.width = 320;
+    out.height = 180;
+    out.getContext("2d")!.drawImage(full, cx, cy, cw, ch, 0, 0, 320, 180);
+    full.width = full.height = 0;
+    return out;
+  }
 
   // Geometry of the clickable parts of the preview, as fractions of the wallpaper.
   const boxes = $derived(boxRects({ lines: [v.line1, v.line2], placement: v.placement }, v.width, v.height));
@@ -188,9 +204,22 @@
     lineInputs[line]?.select();
   }
 
+  // Once, after the first picture: the editable parts light up, left to right.
+  let intro = $state(false);
+  let introPlayed = false;
+  function startIntro() {
+    if (introPlayed) return;
+    introPlayed = true;
+    intro = true;
+    setTimeout(() => (intro = false), 2600);
+  }
+  /** Wave order of the hint: left column, text, right column. */
+  const HINT_ORDER: Record<string, number> = { L1: 0, L2: 1, L3: 2, line0: 3, line1: 4, R1: 5, R2: 6, R3: 7 };
+
   /** Clicks outside a gallery, a box or the text inputs close what is open. */
   function onWindowClick(e: MouseEvent) {
     const t = e.target as Element;
+    intro = false;
     if (openBox && !t.closest(".popover, .hotspot")) openBox = null;
     if (editingText && !t.closest(".line-input, .text-hotspot")) editingText = false;
   }
@@ -367,7 +396,7 @@
 <div class="layout">
   <main class="stage">
     <div class="frame" style="--aspect: {v.width / v.height}">
-      <div class="canvas">
+      <div class="canvas" class:intro>
         <canvas bind:this={preview} aria-label="Preview of {variantLabel(v)}"></canvas>
 
         {#each SLOTS as slot (slot)}
@@ -376,7 +405,7 @@
             type="button"
             class="hotspot"
             class:open={openBox === slot}
-            style="left: {pct(r.x)}; top: {pct(r.y)}; width: {pct(r.w)}; height: {pct(r.h)}"
+            style="left: {pct(r.x)}; top: {pct(r.y)}; width: {pct(r.w)}; height: {pct(r.h)}; --hint: {HINT_ORDER[slot]}"
             aria-label="Box {SLOT_NAMES[slot]}: {creatureLabel(v.slots[slot])}"
             aria-expanded={openBox === slot}
             title={creatureLabel(v.slots[slot])}
@@ -414,7 +443,7 @@
               type="button"
               class="text-hotspot"
               style="left: {pct(words.rect.x / v.width)}; top: {pct((l.baseline - HACK_ASCENT * words.fontSize) / v.height)};
-                width: {pct(words.rect.w / v.width)}; height: {pct((HACK_LINE * words.fontSize) / v.height)}"
+                width: {pct(words.rect.w / v.width)}; height: {pct((HACK_LINE * words.fontSize) / v.height)}; --hint: {HINT_ORDER[`line${li}`]}"
               aria-label="Edit line {li + 1}: {li === 0 ? v.line1 : v.line2}"
               title="Edit text"
               onclick={() => editText(li as 0 | 1)}
@@ -661,6 +690,31 @@
     outline: none;
   }
 
+  /* Intro: every clickable part flashes twice, as a wave from left to right. */
+  .intro .hotspot,
+  .intro .text-hotspot {
+    animation: hint 0.9s ease-in-out calc(var(--hint) * 70ms) 2;
+  }
+  @keyframes hint {
+    0%,
+    100% {
+      border-color: transparent;
+      background: transparent;
+    }
+    40%,
+    60% {
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 18%, transparent);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .intro .hotspot,
+    .intro .text-hotspot {
+      animation: none;
+      border-color: var(--accent);
+    }
+  }
+
   .line-input {
     position: absolute;
     box-sizing: content-box;
@@ -722,7 +776,7 @@
     display: flex;
     gap: 8px;
     height: 100%;
-    padding: 3px 10px 3px 3px;
+    padding: 0 8px 0 0;
     border: 0;
     background: none;
     color: var(--muted);
@@ -740,12 +794,17 @@
     object-fit: contain;
     background: color-mix(in srgb, var(--white) 6%, var(--ground));
   }
+  /* Lines trimmed to their letters (cap height to baseline), so the text sits
+     visually centred in the card. */
   .text {
     display: grid;
     align-content: center;
-    gap: 1px;
+    gap: 5px;
     max-width: 150px;
     font: 400 0.7rem/1.25 "Hack", monospace;
+  }
+  .text > span {
+    text-box: trim-both cap alphabetic;
   }
   .name {
     font-weight: 700;
@@ -778,13 +837,17 @@
   .remove:focus-visible {
     opacity: 1;
   }
-  /* No hover on touch screens: the remove button is always there. */
+  /* No hover on touch screens: the remove button is always there, next to the text. */
   @media (hover: none) {
-    .remove {
-      opacity: 1;
+    .variants .variant {
+      display: flex;
+      align-items: center;
     }
-    .variants .pick {
-      padding-right: calc(1.3rem + 8px);
+    .remove {
+      position: static;
+      flex: none;
+      margin-right: 6px;
+      opacity: 1;
     }
   }
   .add {
