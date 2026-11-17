@@ -1,4 +1,5 @@
-/** App state: a list of variants, each with everything it needs to be exported; URL-hash form and file names. */
+/** App state: a list of variants, each with everything it needs to be exported; local storage, share links and file names. */
+import { deflateSync, inflateSync, strFromU8, strToU8 } from "fflate";
 import { CI_MODES, paletteFor, type Palette } from "./colors";
 import { DEFAULT_SLOTS, SLOTS, type Slots } from "./banner";
 import { ORIGINAL_LINES, slug, type Placement } from "./layout";
@@ -82,7 +83,7 @@ export const formatOf = (f: Format) => FORMATS.find((x) => x.id === f)!;
 export const variantMeta = (v: Variant) => `${v.width} × ${v.height} · ${formatOf(v.format).label}`;
 
 // ---------------------------------------------------------------------------
-// URL hash: base64url JSON, empty for the default state
+// Storage and share links
 
 /** Colour ids of the first version (German names), so old links keep working. */
 const LEGACY_IDS: Record<string, string> = { gruen: "green", tuerkis: "turquoise", lavendel: "lavender", flieder: "lilac", rosa: "rose", gelb: "yellow" };
@@ -113,28 +114,99 @@ function sanitizeVariant(raw: unknown, legacy: Record<string, unknown> = {}): Va
   };
 }
 
-const b64urlEncode = (s: string) => btoa(String.fromCharCode(...new TextEncoder().encode(s))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-const b64urlDecode = (s: string) => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0)));
+const toB64url = (bytes: Uint8Array) => {
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+};
+const fromB64url = (s: string) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
 
-export function readState(hash: string): AppState {
+const MAX_VARIANTS = 64;
+const sanitizeList = (list: unknown[], legacy?: Record<string, unknown>) =>
+  list.map((v) => sanitizeVariant(v, legacy)).filter((v): v is Variant => v !== null).slice(0, MAX_VARIANTS);
+
+/** Variants and the selection, as kept in the browser's local storage. */
+export const STORAGE_KEY = "wall_papers:state";
+
+function parseState(j: Record<string, unknown>): AppState {
   const st = defaultState();
-  const raw = new URLSearchParams(hash.replace(/^#/, "")).get("s");
-  if (!raw) return st;
-  try {
-    const j = JSON.parse(b64urlDecode(raw)) as Record<string, unknown>;
-    const variants = Array.isArray(j.v) ? j.v.map((v) => sanitizeVariant(v, j)).filter((v): v is Variant => v !== null).slice(0, 64) : [];
-    if (variants.length) st.variants = variants;
-    st.active = Math.min(Math.max(0, Number(j.a) || 0), st.variants.length - 1);
-  } catch {
-    // broken link: start fresh
-  }
+  const variants = Array.isArray(j.v) ? sanitizeList(j.v, j) : [];
+  if (variants.length) st.variants = variants;
+  st.active = Math.min(Math.max(0, Number(j.a) || 0), st.variants.length - 1);
   return st;
 }
 
-export function writeState(st: AppState): string {
-  const d = defaultState();
-  if (JSON.stringify({ ...st }) === JSON.stringify(d)) return "";
-  return `s=${b64urlEncode(JSON.stringify({ v: st.variants, a: st.active }))}`;
+/** Saved variants, or the original wallpaper when there are none (or storage is unavailable). */
+export function loadState(storage: Pick<Storage, "getItem"> | undefined): AppState {
+  try {
+    const raw = storage?.getItem(STORAGE_KEY);
+    if (raw) return parseState(JSON.parse(raw));
+  } catch {
+    // unreadable or blocked storage: start fresh
+  }
+  return defaultState();
+}
+
+export function saveState(storage: Pick<Storage, "setItem"> | undefined, st: AppState): void {
+  try {
+    storage?.setItem(STORAGE_KEY, JSON.stringify({ v: st.variants, a: st.active }));
+  } catch {
+    // private mode or full storage: keep working without saving
+  }
+}
+
+/** Same fields in the same order, so two variants can be compared as JSON. */
+const normalize = (v: Variant) => sanitizeVariant(v)!;
+export const sameVariant = (a: Variant, b: Variant) => JSON.stringify(normalize(a)) === JSON.stringify(normalize(b));
+
+/** URL hash that shares a list of variants: `v=` and the deflated JSON in base64url. */
+export const shareHash = (list: readonly Variant[]) =>
+  `v=${toB64url(deflateSync(strToU8(JSON.stringify(list.slice(0, MAX_VARIANTS).map(normalize))), { level: 9 }))}`;
+
+/**
+ * The variants a link shares (none for a page without a share link).
+ * Also reads the links from before share links existed (`s=`, the whole state as plain JSON).
+ */
+export function sharedVariants(hash: string): Variant[] {
+  const q = new URLSearchParams(hash.replace(/^#/, ""));
+  try {
+    const v = q.get("v");
+    if (v) {
+      const j: unknown = JSON.parse(strFromU8(inflateSync(fromB64url(v))));
+      return sanitizeList(Array.isArray(j) ? j : [j]);
+    }
+    const s = q.get("s");
+    if (s) return parseState(JSON.parse(strFromU8(fromB64url(s)))).variants;
+  } catch {
+    // broken link
+  }
+  return [];
+}
+
+/** Where each shared variant already is in the list (-1 for new ones). */
+export const findShared = (st: AppState, shared: readonly Variant[]) => shared.map((x) => st.variants.findIndex((y) => sameVariant(x, y)));
+
+/** Adds the shared variants that are not in the list yet and selects the first shared one. */
+export function addShared(st: AppState, shared: readonly Variant[]): AppState {
+  const variants = [...st.variants];
+  const at = shared.map((x) => {
+    const i = variants.findIndex((y) => sameVariant(x, y));
+    if (i >= 0) return i;
+    variants.push(cloneVariant(normalize(x)));
+    return variants.length - 1;
+  });
+  return { variants: variants.slice(0, MAX_VARIANTS), active: Math.min(at[0] ?? st.active, MAX_VARIANTS - 1) };
+}
+
+/** One shared variant takes the place of the selected one; several replace the whole list. */
+export function replaceWithShared(st: AppState, shared: readonly Variant[]): AppState {
+  if (!shared.length) return st;
+  if (shared.length === 1) {
+    const variants = [...st.variants];
+    variants[st.active] = cloneVariant(normalize(shared[0]));
+    return { variants, active: st.active };
+  }
+  return { variants: shared.map((x) => cloneVariant(normalize(x))), active: 0 };
 }
 
 // ---------------------------------------------------------------------------

@@ -37,7 +37,7 @@ rendered on your machine.
   otherwise a ZIP with the PNGs, SVGs and one `.figcraft` for the FigCraft
   variants.
 
-The whole set of variants lives in the URL, so it can be shared as a link.
+Variants are kept in the browser (local storage). Pick **Share** as output to get a link to the current variant or to all of them; opening such a link offers to add the shared variants or to replace your own (variants you already have are just selected).
 
 ## How it works
 
@@ -75,7 +75,7 @@ SVG: `pnpm split-banner` (Python 3). CI fails if it is out of date.
 | `src/lib/svgpath.ts` | SVG path parser (lines, curves, arcs) |
 | `src/lib/colors.ts` | CI palette and the background derivation |
 | `src/lib/layout.ts` | Banner geometry, wordmark layout, placements |
-| `src/lib/state.ts` | Variants, URL hash, file names |
+| `src/lib/state.ts` | Variants, local storage, share links, file names |
 | `src/lib/render.ts` | Rasterising in the browser |
 | `src/routes/+page.svelte`, `src/lib/components/` | The app |
 

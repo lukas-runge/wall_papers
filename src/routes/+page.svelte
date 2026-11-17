@@ -19,16 +19,30 @@
     colourInfo,
     designOf,
     fileNames,
-    readState,
+    findShared,
+    addShared,
+    loadState,
+    replaceWithShared,
+    saveState,
+    shareHash,
+    sharedVariants,
     variantLabel,
     variantMeta,
-    writeState,
     type AppState,
     type Format,
     type Variant,
   } from "#lib/state";
 
-  let s = $state<AppState>(readState(location.hash));
+  /** Local storage, if the browser lets the page use it. */
+  const storage = () => {
+    try {
+      return localStorage;
+    } catch {
+      return undefined;
+    }
+  };
+
+  let s = $state<AppState>(loadState(storage()));
   const v = $derived(s.variants[s.active]);
   const info = $derived(colourInfo(v.colour));
   const sizeKey = $derived(`${v.width}x${v.height}`);
@@ -66,11 +80,55 @@
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", p.ground);
   }
 
-  // State lives in the URL, so a set of variants can be shared as a link.
+  // Variants stay in the browser between visits.
+  $effect(() => saveState(storage(), s));
+
+  // Sharing: a link to the active variant or to all of them, instead of a file.
+  let sharing = $state(false);
+  let link = $state("");
+  const OUTPUTS: { id: Format | "share"; label: string }[] = [...FORMATS, { id: "share", label: "Share" }];
+
+  // A copied link stops matching once something changes.
   $effect(() => {
-    const hash = writeState(s);
-    if (location.hash.slice(1) !== hash) history.replaceState(null, "", hash ? `#${hash}` : location.pathname);
+    JSON.stringify(s.variants);
+    link = "";
+    if (sharing) status = "";
   });
+
+  async function share(list: Variant[]) {
+    link = `${location.origin}${location.pathname}#${shareHash($state.snapshot(list))}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      status = list.length === 1 ? "Link copied" : `Link to ${list.length} variants copied`;
+    } catch {
+      status = "Copy the link:";
+    }
+  }
+
+  // Opening a share link: known variants are just selected, new ones are offered.
+  let incoming = $state<Variant[]>([]);
+  let importDialog: HTMLDialogElement;
+  const known = $derived(findShared(s, incoming));
+  const newCount = $derived(known.filter((i) => i < 0).length);
+
+  function openShared() {
+    const shared = sharedVariants(location.hash);
+    if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+    if (!shared.length) return;
+    const at = findShared(s, shared);
+    if (at.every((i) => i >= 0)) {
+      s.active = at[0];
+      return;
+    }
+    incoming = shared;
+    importDialog.showModal();
+  }
+
+  function takeShared(how: "add" | "replace") {
+    const st = $state.snapshot(s), shared = $state.snapshot(incoming);
+    s = how === "add" ? addShared(st, shared) : replaceWithShared(st, shared);
+    importDialog.close();
+  }
 
   // Preview of the active variant (without its text while the text is being edited in place).
   let previewGen = 0;
@@ -96,7 +154,7 @@
   // Thumbnails of all variants (cached by look and aspect ratio; the format does not change them).
   const thumbKey = (x: Variant) => JSON.stringify({ ...x, format: undefined });
   $effect(() => {
-    const todo = s.variants.map((x) => ({ key: thumbKey(x), design: designOf(x), w: x.width, h: x.height })).filter((x) => !thumbs[x.key]);
+    const todo = [...s.variants, ...incoming].map((x) => ({ key: thumbKey(x), design: designOf(x), w: x.width, h: x.height })).filter((x) => !thumbs[x.key]);
     if (!todo.length) return;
     const t = setTimeout(async () => {
       for (const x of todo) {
@@ -231,9 +289,9 @@
 
   onMount(() => {
     applyTheme(info.palette);
-    const onHash = () => (s = readState(location.hash));
-    addEventListener("hashchange", onHash);
-    return () => removeEventListener("hashchange", onHash);
+    openShared();
+    addEventListener("hashchange", openShared);
+    return () => removeEventListener("hashchange", openShared);
   });
 
   const clampSize = (val: string) => Math.min(16384, Math.max(64, Math.round(Number(val) || 0)));
@@ -246,18 +304,22 @@
 
 <svelte:window onclick={onWindowClick} onkeydown={onKey} />
 
+{#snippet card(x: Variant)}
+  {#if thumbs[thumbKey(x)]}<img src={thumbs[thumbKey(x)]} alt="" />{:else}<span class="placeholder"></span>{/if}
+  <span class="text">
+    <span class="name">{x.line1} {x.line2}</span>
+    <span class="meta">{colourInfo(x.colour).name}</span>
+    <span class="meta">{variantMeta(x)}</span>
+  </span>
+{/snippet}
+
 <header class="masthead">
   <h1 class="wordmark" aria-label="WALL_PAPERS"><span>WALL<span class="cursor">_</span></span><span>PAPERS</span></h1>
     <div class="variants">
       {#each s.variants as x, i (i)}
         <div class="variant" class:on={i === s.active}>
           <button type="button" class="pick" onclick={() => (s.active = i)} aria-label="Edit {variantLabel(x)}" aria-pressed={i === s.active}>
-            {#if thumbs[thumbKey(x)]}<img src={thumbs[thumbKey(x)]} alt="" />{:else}<span class="placeholder"></span>{/if}
-            <span class="text">
-              <span class="name">{x.line1} {x.line2}</span>
-              <span class="meta">{colourInfo(x.colour).name}</span>
-              <span class="meta">{variantMeta(x)}</span>
-            </span>
+            {@render card(x)}
           </button>
           {#if s.variants.length > 1}
             <button type="button" class="remove" onclick={() => removeVariant(i)} aria-label="Remove {variantLabel(x)}" title="Remove">×</button>
@@ -386,17 +448,49 @@
           <label>Height <input type="number" min="64" max="16384" value={v.height} onchange={(e) => update({ height: clampSize(e.currentTarget.value) })} /></label>
         </div>
       {/if}
-      <Segmented label="Format" options={FORMATS} value={v.format} onchange={(format) => update({ format })} />
+      <Segmented
+        label="Format"
+        options={OUTPUTS}
+        value={sharing ? "share" : v.format}
+        onchange={(o) => {
+          sharing = o === "share";
+          status = link = "";
+          if (o !== "share") update({ format: o });
+        }}
+      />
     </fieldset>
 
     <fieldset>
-      <legend>Download</legend>
-      <button type="button" class="loud" disabled={busy} onclick={downloadVariant}>Download variant</button>
-      <button type="button" class="quiet" disabled={busy} onclick={downloadAll}>Download all variants</button>
+      {#if sharing}
+        <legend>Share</legend>
+        <button type="button" class="loud" onclick={() => share([v])}>Share variant</button>
+        <button type="button" class="quiet" onclick={() => share(s.variants)}>Share all variants</button>
+      {:else}
+        <legend>Download</legend>
+        <button type="button" class="loud" disabled={busy} onclick={downloadVariant}>Download variant</button>
+        <button type="button" class="quiet" disabled={busy} onclick={downloadAll}>Download all variants</button>
+      {/if}
       {#if status}<p class="status" role="status">{status}</p>{/if}
+      {#if sharing && link}<input class="link" readonly value={link} aria-label="Link" onfocus={(e) => e.currentTarget.select()} />{/if}
     </fieldset>
   </aside>
 </main>
+
+<dialog bind:this={importDialog} class="import" onclose={() => (incoming = [])} aria-labelledby="import-title">
+  <h2 id="import-title">{incoming.length === 1 ? "Shared variant" : `${incoming.length} shared variants`}</h2>
+  <ul class="incoming">
+    {#each incoming as x, i (i)}
+      <li class="variant" class:known={known[i] >= 0} title={known[i] >= 0 ? "Already in your variants" : undefined}>{@render card(x)}</li>
+    {/each}
+  </ul>
+  <div class="actions">
+    <button type="button" class="loud" onclick={() => takeShared("add")}>
+      {incoming.length === 1 ? "Add as new variant" : newCount === 1 ? "Add 1 new variant" : `Add ${newCount} new variants`}
+    </button>
+    <button type="button" class="quiet" onclick={() => takeShared("replace")}>{incoming.length === 1 ? "Replace current variant" : "Replace all variants"}</button>
+    <button type="button" class="quiet" onclick={() => importDialog.close()}>Cancel</button>
+  </div>
+</dialog>
 
 <footer class="footer">
   <p>
@@ -558,7 +652,8 @@
   .variant.on {
     border-color: var(--accent);
   }
-  .pick {
+  .pick,
+  .incoming .variant {
     display: flex;
     gap: 8px;
     height: 100%;
@@ -568,10 +663,11 @@
     color: var(--muted);
     text-align: left;
   }
-  .variant.on .pick {
+  .variant.on .pick,
+  .incoming .variant {
     color: var(--white);
   }
-  .pick img,
+  .variant img,
   .placeholder {
     display: block;
     height: 100%;
@@ -660,6 +756,48 @@
   .status {
     margin: 0;
     color: var(--muted);
+  }
+  .link {
+    font-size: 0.75rem;
+    color: var(--white);
+  }
+
+  .import {
+    max-width: min(560px, calc(100vw - 32px));
+    padding: 0.4rem 1.2rem 1.2rem;
+    border: 1.5px solid var(--accent);
+    background: var(--ground);
+    color: var(--white);
+  }
+  .import::backdrop {
+    background: rgb(0 0 0 / 0.65);
+  }
+  .import h2 {
+    margin: 0.4rem 0 0.8rem;
+    font-size: 1.8rem;
+    line-height: 1;
+  }
+  .incoming {
+    display: grid;
+    gap: 8px;
+    max-height: 50svh;
+    overflow-y: auto;
+    margin: 0 0 1rem;
+    padding: 0;
+    list-style: none;
+  }
+  .incoming .variant {
+    border-color: var(--accent);
+    padding: 3px 10px 3px 3px;
+    height: 64px;
+  }
+  .incoming .known {
+    opacity: 0.45;
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
   .footer {
