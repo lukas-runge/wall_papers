@@ -837,17 +837,14 @@
   .remove:focus-visible {
     opacity: 1;
   }
-  /* No hover on touch screens: the remove button is always there, next to the text. */
+  /* No hover on touch screens: the remove button is always there, in the
+     corner; only the name line (next to it) makes room. */
   @media (hover: none) {
-    .variants .variant {
-      display: flex;
-      align-items: center;
-    }
     .remove {
-      position: static;
-      flex: none;
-      margin-right: 6px;
       opacity: 1;
+    }
+    .variant:has(.remove) .name {
+      padding-right: calc(1.3rem + 2px);
     }
   }
   .add {

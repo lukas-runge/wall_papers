@@ -17,8 +17,8 @@
     </button>
   {/each}
   <label class="own" class:on={isOwn} style="--c: {own}">
-    <input type="color" value={own} aria-label="Own colour" oninput={(e) => onchange((own = e.currentTarget.value))} onclick={() => isOwn || onchange(own)} />
-    <span>Own</span>
+    <input type="color" value={own} aria-label="Custom colour" oninput={(e) => onchange((own = e.currentTarget.value))} onclick={() => isOwn || onchange(own)} />
+    <span class="dot rainbow"></span><span>Custom</span>
   </label>
 </div>
 
@@ -51,26 +51,25 @@
     border-radius: 50%;
     background: var(--c);
   }
+  .rainbow {
+    background: conic-gradient(#ff3b3b, #ffd23b, #5bff3b, #3bffe8, #3b6bff, #d03bff, #ff3b3b);
+  }
+  /* The colour field covers the whole button, invisible: the rainbow dot stands for it. */
+  .own {
+    position: relative;
+  }
   .own input {
-    flex: none;
-    width: 1.3em;
-    height: 1.3em;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
     padding: 0;
     border: 0;
-    border-radius: 50%;
-    overflow: hidden;
-    background: none;
+    opacity: 0;
     cursor: pointer;
   }
-  .own input::-webkit-color-swatch-wrapper {
-    padding: 0;
-  }
-  .own input::-webkit-color-swatch {
-    border: 0;
-    border-radius: 50%;
-  }
-  .own input::-moz-color-swatch {
-    border: 0;
-    border-radius: 50%;
+  .own:has(input:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
 </style>
