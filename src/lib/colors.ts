@@ -35,14 +35,14 @@ const ORIGINAL_GROUND = "#000d00";
 const ORIGINAL_EDGE = "#000900";
 
 export const CI_MODES: readonly ColourMode[] = [
-  { id: "gruen", name: "Grün", index: 0, accent: "#75b44b", frame: "#75b24c", lines: "#6ab143", ground: ORIGINAL_GROUND, edge: ORIGINAL_EDGE },
-  { id: "tuerkis", name: "Türkis", index: 1, accent: "#15ada3", frame: "#15ada3", lines: "#15ada3", ground: "#000e0c", edge: "#000a08" },
-  { id: "lavendel", name: "Lavendel", index: 2, accent: "#9fa4e8", frame: "#9fa4e8", lines: "#9fa4e8", ground: "#050513", edge: "#03030e" },
-  { id: "flieder", name: "Flieder", index: 3, accent: "#c892d6", frame: "#c892d6", lines: "#c892d6", ground: "#0e0310", edge: "#0a020b" },
+  { id: "green", name: "Green", index: 0, accent: "#75b44b", frame: "#75b24c", lines: "#6ab143", ground: ORIGINAL_GROUND, edge: ORIGINAL_EDGE },
+  { id: "turquoise", name: "Turquoise", index: 1, accent: "#15ada3", frame: "#15ada3", lines: "#15ada3", ground: "#000e0c", edge: "#000a08" },
+  { id: "lavender", name: "Lavender", index: 2, accent: "#9fa4e8", frame: "#9fa4e8", lines: "#9fa4e8", ground: "#050513", edge: "#03030e" },
+  { id: "lilac", name: "Lilac", index: 3, accent: "#c892d6", frame: "#c892d6", lines: "#c892d6", ground: "#0e0310", edge: "#0a020b" },
   { id: "pink", name: "Pink", index: 4, accent: "#ee5da2", frame: "#ee5da2", lines: "#ee5da2", ground: "#14020a", edge: "#0f0207" },
-  { id: "rosa", name: "Rosa", index: 5, accent: "#ea6f82", frame: "#ea6f82", lines: "#ea6f82", ground: "#160305", edge: "#110203" },
+  { id: "rose", name: "Rose", index: 5, accent: "#ea6f82", frame: "#ea6f82", lines: "#ea6f82", ground: "#160305", edge: "#110203" },
   { id: "orange", name: "Orange", index: 6, accent: "#f88a30", frame: "#f88a30", lines: "#f88a30", ground: "#150900", edge: "#100600" },
-  { id: "gelb", name: "Gelb", index: 7, accent: "#ffbc40", frame: "#ffbc40", lines: "#ffbc40", ground: "#130c00", edge: "#0e0800" },
+  { id: "yellow", name: "Yellow", index: 7, accent: "#ffbc40", frame: "#ffbc40", lines: "#ffbc40", ground: "#130c00", edge: "#0e0800" },
 ];
 
 /** A palette for any accent colour, background derived like the CI modes. */

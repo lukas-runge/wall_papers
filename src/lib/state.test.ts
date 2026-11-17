@@ -22,7 +22,7 @@ describe("URL state", () => {
     const st = readState("#s=bm9wZQ");
     expect(st).toEqual(defaultState());
     const bad = readState(`#s=${btoa(JSON.stringify({ v: [{ colour: "javascript:", slots: { L1: "<script>" } }], w: -5, f: "exe" }))}`);
-    expect(bad.variants[0].colour).toBe("gruen");
+    expect(bad.variants[0].colour).toBe("green");
     expect(bad.variants[0].slots.L1).toBe(DEFAULT_VARIANT.slots.L1);
     expect(bad.width).toBe(7680);
     expect(bad.format).toBe("png");
@@ -30,8 +30,13 @@ describe("URL state", () => {
 });
 
 describe("colours", () => {
+  it("still reads the German colour ids of old links", () => {
+    const old = readState(`#s=${btoa(JSON.stringify({ v: [{ colour: "tuerkis" }, { colour: "gelb" }] }))}`);
+    expect(old.variants.map((x) => x.colour)).toEqual(["turquoise", "yellow"]);
+  });
+
   it("names CI and own colours", () => {
-    expect(colourInfo("tuerkis")).toMatchObject({ index: "1", name: "Türkis" });
+    expect(colourInfo("turquoise")).toMatchObject({ index: "1", name: "Turquoise" });
     expect(colourInfo("#00B4FF")).toMatchObject({ index: "X", name: "00b4ff" });
   });
 });
@@ -39,10 +44,10 @@ describe("colours", () => {
 describe("file names", () => {
   it("follows the scheme of the hand-made exports and stays unique", () => {
     const v = { ...DEFAULT_VARIANT, line1: "SELF_", line2: "HOSTED" };
-    expect(fileNames([{ ...v, colour: "tuerkis" }, { ...v, colour: "gruen" }, { ...v, colour: "gruen" }], "png")).toEqual([
-      "40C3_SELF_HOSTED_1_Tuerkis.png",
-      "40C3_SELF_HOSTED_0_Gruen.png",
-      "40C3_SELF_HOSTED_0_Gruen-2.png",
+    expect(fileNames([{ ...v, colour: "turquoise" }, { ...v, colour: "green" }, { ...v, colour: "green" }], "png")).toEqual([
+      "40C3_SELF_HOSTED_1_Turquoise.png",
+      "40C3_SELF_HOSTED_0_Green.png",
+      "40C3_SELF_HOSTED_0_Green-2.png",
     ]);
   });
 });

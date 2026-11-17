@@ -4,7 +4,7 @@ import { CI_MODES, darkInHue, hexToRgb, paletteFor, rgbToHex, toLch } from "./co
 describe("background derived from the accent", () => {
   // The CI table was computed once and checked by eye in FigCraft; the
   // derivation must reproduce it for every colour except the original green.
-  for (const mode of CI_MODES.filter((m) => m.id !== "gruen")) {
+  for (const mode of CI_MODES.filter((m) => m.id !== "green")) {
     it(`${mode.name} gives ${mode.ground} / ${mode.edge}`, () => {
       const p = paletteFor(mode.accent);
       expect(p.ground).toBe(mode.ground);

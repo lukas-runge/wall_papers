@@ -43,7 +43,7 @@ export interface AppState {
 export const DEFAULT_VARIANT: Variant = {
   line1: ORIGINAL_LINES[0],
   line2: ORIGINAL_LINES[1],
-  colour: "gruen",
+  colour: "green",
   slots: { ...DEFAULT_SLOTS },
   placement: "lockscreen",
 };
@@ -79,11 +79,15 @@ export const variantLabel = (v: Variant) => `${v.line1} ${v.line2} · ${colourIn
 // ---------------------------------------------------------------------------
 // URL hash: base64url JSON, empty for the default state
 
+/** Colour ids of the first version (German names), so old links keep working. */
+const LEGACY_IDS: Record<string, string> = { gruen: "green", tuerkis: "turquoise", lavendel: "lavender", flieder: "lilac", rosa: "rose", gelb: "yellow" };
+
 function sanitizeVariant(raw: unknown): Variant | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
   const str = (v: unknown, max: number) => (typeof v === "string" ? v.toUpperCase().slice(0, max) : null);
-  const colour = typeof r.colour === "string" && (CI_MODES.some((m) => m.id === r.colour) || isHex(r.colour)) ? r.colour : DEFAULT_VARIANT.colour;
+  const c = typeof r.colour === "string" ? (LEGACY_IDS[r.colour] ?? r.colour) : "";
+  const colour = CI_MODES.some((m) => m.id === c) || isHex(c) ? c : DEFAULT_VARIANT.colour;
   const slots = { ...DEFAULT_SLOTS };
   if (r.slots && typeof r.slots === "object") for (const s of SLOTS) {
     const v = (r.slots as Record<string, unknown>)[s];
@@ -129,13 +133,10 @@ export function writeState(st: AppState): string {
 // ---------------------------------------------------------------------------
 // File names
 
-const ascii = (s: string) =>
-  s.replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/Ä/g, "Ae").replace(/Ö/g, "Oe").replace(/Ü/g, "Ue").replace(/ß/g, "ss");
-
 /** e.g. 40C3_SELF_HOSTED_4_Pink — the scheme of the hand-made exports. */
 export function baseName(v: Variant): string {
   const c = colourInfo(v.colour);
-  return `40C3_${slug([v.line1, v.line2])}_${c.index}_${ascii(c.name).replace(/[^A-Za-z0-9]+/g, "")}`;
+  return `40C3_${slug([v.line1, v.line2])}_${c.index}_${c.name.replace(/[^A-Za-z0-9]+/g, "")}`;
 }
 
 /** Unique file names for a list of variants (same slogan and colour get -2, -3 …). */
